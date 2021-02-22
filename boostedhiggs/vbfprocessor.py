@@ -56,8 +56,10 @@ class HbbProcessor(processor.ProcessorABC):
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
-                hist.Bin('msd1', r'Jet $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet ddb score', [0, 0.89, 1]),
+                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
+                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
+                hist.Bin('deta', r'$\Delta\eta_{jj}$', 1, 3.5, 7),
+                hist.Bin('mjj',r'$m_{jj}$ [GeV]', 1, 1000, 4000)
             ),
             'templates2': hist.Hist(
                 'Events',
@@ -68,6 +70,18 @@ class HbbProcessor(processor.ProcessorABC):
                 hist.Bin('msd1', r'Jet $m_{sd}$', 22, 47, 201),
                 hist.Bin('ddb1', r'Jet ddb score', [0, 0.89, 1]),
             ),
+            'templates3': hist.Hist(
+                'Events',
+                hist.Cat('dataset', 'Dataset'),
+                hist.Cat('region', 'Region'),
+                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
+                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
+                hist.Bin('deta', r'$\Delta\eta_{jj}$', 14, 0, 7),
+                hist.Bin('mjj', r'$m_{jj}$', 20, 0, 4000),
+                hist.Bin('qgl1', r'AK4 jet 1 QGL',5,0,1),
+                hist.Bin('qgl2', r'AK4 jet 2 QGL',5,0,1),
+            ),
+
         })
 
     @property
@@ -167,6 +181,24 @@ class HbbProcessor(processor.ProcessorABC):
 
         selection.add('met', events.MET.pt < 140.)
 
+        # VBF specific variables
+        dR = np.sqrt(dphi*dphi + deta*deta)
+        ak4_outside_ak8 = jets[(dR > 0.8).all()]
+
+        jet1 = ak4_outside_ak8[:, 0:1]
+        jet2 = ak4_outside_ak8[:, 1:2]
+
+        ak4_pair = jet1.cross(jet2, nested=False)
+
+        # redefine deta to be between ak4 jets                                                               
+        deta = abs(ak4_pair.i0.eta - ak4_pair.i1.eta)
+        mjj = (ak4_pair.i0+ak4_pair.i1).mass
+        qgl1 = jet1.qgl
+        qgl2 = jet2.qgl
+
+        selection.add('deta', (deta > 3.5).any())
+        selection.add('mjj', (mjj > 1000.).any())
+
         goodmuon = (
             (events.Muon.pt > 10)
             & (abs(events.Muon.eta) < 2.4)
@@ -249,6 +281,8 @@ class HbbProcessor(processor.ProcessorABC):
                 pt1=normalize(candidatejet.pt, cut),
                 msd1=normalize(msd_matched, cut),
                 ddb1=normalize(candidatejet.btagDDBvL, cut),
+                deta=normalize(deta, cut),
+                mjj=normalize(mjj, cut),
                 weight=weight,
             )
             output['templates2'].fill(
@@ -258,6 +292,17 @@ class HbbProcessor(processor.ProcessorABC):
                 etamu=normalize(abs(leadingmuon.eta),cut),
                 msd1=normalize(msd_matched, cut),
                 ddb1=normalize(candidatejet.btagDDBvL, cut),
+                weight=weight,
+            )
+            output['templates3'].fill(
+                dataset=dataset,
+                region=region,
+                msd1=normalize(msd_matched, cut),
+                ddb1=normalize(candidatejet.btagDDBvL, cut),
+                deta=normalize(deta, cut),
+                mjj=normalize(mjj, cut),
+                qgl1=normalize(qgl1, cut),
+                qgl2=normalize(qgl2, cut),
                 weight=weight,
             )
 
