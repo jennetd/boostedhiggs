@@ -173,26 +173,11 @@ class VH1DProcessor(processor.ProcessorABC):
         # only consider first 4 jets to be consistent with old framework
         jets = jets[:, :4]
         dphi = abs(jets.delta_phi(candidatejet))
-        selection.add('antiak4btagMediumOppHem', ak.max(jets[dphi > np.pi / 2].btagDeepB, axis=1, mask_identity=False) < BTagEfficiency.btagWPs[self._year]['medium'])
+#        selection.add('antiak4btagMediumOppHem', ak.max(jets[dphi > np.pi / 2].btagDeepB, axis=1, mask_identity=False) < BTagEfficiency.btagWPs[self._year]['medium'])
         ak4_away = jets[dphi > 0.8]
-        selection.add('ak4btagMedium08', ak.max(ak4_away.btagDeepB, axis=1, mask_identity=False) > BTagEfficiency.btagWPs[self._year]['medium'])
+#        selection.add('ak4btagMedium08', ak.max(ak4_away.btagDeepB, axis=1, mask_identity=False) > BTagEfficiency.btagWPs[self._year]['medium'])
 
         selection.add('met', events.MET.pt < 140.)
-
-        # VBF specific variables
-        dR = jets.delta_r(candidatejet)
-        ak4_outside_ak8 = jets[dR > 0.8]
-
-        jet1 = ak4_outside_ak8[:, 0:1]
-        jet2 = ak4_outside_ak8[:, 1:2]
-
-        # redefine deta to be between ak4 jets                                                               
-        deta = abs(ak.firsts(jet1).eta - ak.firsts(jet2).eta)
-        mjj = ( ak.firsts(jet1) + ak.firsts(jet2) ).mass
-        qgl1 = jet1.qgl
-        qgl2 = jet2.qgl
-
-        selection.add('ak4jets',deta>=0)
 
         goodmuon = (
             (events.Muon.pt > 10)
@@ -245,8 +230,8 @@ class VH1DProcessor(processor.ProcessorABC):
         msd2_matched = secondjet.msdcorr * self._msdSF[self._year] * (genflavor2 > 0) + secondjet.msdcorr * (genflavor2 == 0)
 
         regions = {
-            'signal': ['trigger', 'minjetkin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMediumOppHem', 'met', 'noleptons','ak4jets'],
-            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetacceptance', 'jetid', 'n2ddt', 'ak4btagMedium08', 'onemuon', 'muonkin', 'muonDphiAK8', 'ak4jets'],
+            'signal': ['trigger', 'minjetkin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMediumOppHem', 'met', 'noleptons'],
+            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetacceptance', 'jetid', 'n2ddt', 'ak4btagMedium08', 'onemuon', 'muonkin', 'muonDphiAK8'],
             'noselection': [],
         }
 
