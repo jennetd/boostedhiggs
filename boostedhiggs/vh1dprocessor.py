@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class VH1DProcessor(processor.ProcessorABC):
-    def __init__(self, year='2017', jet_arbitration='pt'):
+    def __init__(self, year='2017', jet_arbitration='revpt'):
         self._year = year
         self._jet_arbitration = jet_arbitration
 
@@ -55,11 +55,13 @@ class VH1DProcessor(processor.ProcessorABC):
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
-                hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
+#                hist.Bin('pt1', r'Jet 1 $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),               
                 hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
                 hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
-                hist.Bin('deta', r'$\Delta\eta_{jj}$', 1, 3.5, 7),
-                hist.Bin('mjj',r'$m_{jj}$ [GeV]', 1, 1000, 4000)
+                hist.Bin('pt2', r'Jet 2 $p_{T}$ [GeV]', [300, 350, 400, 450, 500, 550, 600, 675, 800, 1200]),
+                hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
+#                hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.89, 1]),            
+                hist.Bin('n2ddt2',r'Jet 2 N2DDT', [-0.25, 0, 0.25]),
             ),
             'templates2': hist.Hist(
                 'Events',
@@ -69,17 +71,6 @@ class VH1DProcessor(processor.ProcessorABC):
                 hist.Bin('etamu',r'Muon $\eta$',20,0,3),
                 hist.Bin('msd1', r'Jet $m_{sd}$', 22, 47, 201),
                 hist.Bin('ddb1', r'Jet ddb score', [0, 0.89, 1]),
-            ),
-            'templates3': hist.Hist(
-                'Events',
-                hist.Cat('dataset', 'Dataset'),
-                hist.Cat('region', 'Region'),
-                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
-                hist.Bin('deta', r'$\Delta\eta_{jj}$', 14, 0, 7),
-                hist.Bin('mjj', r'$m_{jj}$', 20, 0, 4000),
-                hist.Bin('qgl1', r'AK4 jet 1 QGL',5,0,1),
-                hist.Bin('qgl2', r'AK4 jet 2 QGL',5,0,1),
             ),
 
         })
@@ -131,12 +122,19 @@ class VH1DProcessor(processor.ProcessorABC):
             & (abs(fatjets.eta) < 2.5)
             & fatjets.isTight  # this is loose in sampleContainer
         ]
+
         if self._jet_arbitration == 'pt':
-            candidatejet = ak.firsts(candidatejet)
+            secondjet = ak.firsts(candidatejet[:, 1:2])
+            candidatejet = ak.firsts(candidatejet[:, 0:1])
+        elif self._jet_arbitration == 'revpt':
+            secondjet = ak.firsts(candidatejet[:, 0:1])
+            candidatejet = ak.firsts(candidatejet[:, 1:2])
         elif self._jet_arbitration == 'mass':
-            candidatejet = candidatejet[
-                ak.argmax(candidatejet.msdcorr)
-            ]
+            idx = (candidatejet.msdcorr).argsort()
+            idx0 = idx[:,0:1]
+            idx1 = idx[:,1:2]
+            secondjet = ak.firsts(candidatejet[idx1])
+            candidatejet = ak.firsts(candidatejet[idx0])
         elif self._jet_arbitration == 'n2':
             candidatejet = candidatejet[
                 ak.argmin(candidatejet.n2ddt)
@@ -182,22 +180,19 @@ class VH1DProcessor(processor.ProcessorABC):
         selection.add('met', events.MET.pt < 140.)
 
         # VBF specific variables
-        dR = np.sqrt(dphi*dphi + deta*deta)
-        ak4_outside_ak8 = jets[(dR > 0.8).all()]
+        dR = jets.delta_r(candidatejet)
+        ak4_outside_ak8 = jets[dR > 0.8]
 
         jet1 = ak4_outside_ak8[:, 0:1]
         jet2 = ak4_outside_ak8[:, 1:2]
 
-        ak4_pair = jet1.cross(jet2, nested=False)
-
         # redefine deta to be between ak4 jets                                                               
-        deta = abs(ak4_pair.i0.eta - ak4_pair.i1.eta)
-        mjj = (ak4_pair.i0+ak4_pair.i1).mass
+        deta = abs(ak.firsts(jet1).eta - ak.firsts(jet2).eta)
+        mjj = ( ak.firsts(jet1) + ak.firsts(jet2) ).mass
         qgl1 = jet1.qgl
         qgl2 = jet2.qgl
 
-        selection.add('deta', (deta > 3.5).any())
-        selection.add('mjj', (mjj > 1000.).any())
+        selection.add('ak4jets',deta>=0)
 
         goodmuon = (
             (events.Muon.pt > 10)
@@ -228,12 +223,18 @@ class VH1DProcessor(processor.ProcessorABC):
 
         if isRealData:
             genflavor = np.zeros(len(events))
+            genflavor2 = np.zeros(len(events))
         else:
             weights.add('genweight', events.genWeight)
             add_pileup_weight(weights, events.Pileup.nPU, self._year, dataset)
             bosons = getBosons(events.GenPart)
+
             matchedBoson = candidatejet.nearest(bosons, axis=None, threshold=0.8)
             genflavor = bosonFlavor(matchedBoson)
+
+            matchedBoson2 = secondjet.nearest(bosons, axis=None, threshold=0.8)
+            genflavor2 = bosonFlavor(matchedBoson2)
+
             genBosonPt = ak.fill_none(ak.firsts(bosons.pt), 0)
             add_VJets_NLOkFactor(weights, genBosonPt, self._year, dataset)
             add_jetTriggerWeight(weights, candidatejet.msdcorr, candidatejet.pt, self._year)
@@ -241,10 +242,11 @@ class VH1DProcessor(processor.ProcessorABC):
             logger.debug("Weight statistics: %r" % weights.weightStatistics)
 
         msd_matched = candidatejet.msdcorr * self._msdSF[self._year] * (genflavor > 0) + candidatejet.msdcorr * (genflavor == 0)
+        msd2_matched = secondjet.msdcorr * self._msdSF[self._year] * (genflavor2 > 0) + secondjet.msdcorr * (genflavor2 == 0)
 
         regions = {
-            'signal': ['trigger', 'minjetkin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMediumOppHem', 'met', 'noleptons'],
-            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetacceptance', 'jetid', 'n2ddt', 'ak4btagMedium08', 'onemuon', 'muonkin', 'muonDphiAK8'],
+            'signal': ['trigger', 'minjetkin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMediumOppHem', 'met', 'noleptons','ak4jets'],
+            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetacceptance', 'jetid', 'n2ddt', 'ak4btagMedium08', 'onemuon', 'muonkin', 'muonDphiAK8', 'ak4jets'],
             'noselection': [],
         }
 
@@ -278,11 +280,13 @@ class VH1DProcessor(processor.ProcessorABC):
             output['templates1'].fill(
                 dataset=dataset,
                 region=region,
-                pt1=normalize(candidatejet.pt, cut),
+#                pt1=normalize(candidatejet.pt, cut),                           
                 msd1=normalize(msd_matched, cut),
                 ddb1=normalize(candidatejet.btagDDBvL, cut),
-                deta=normalize(deta, cut),
-                mjj=normalize(mjj, cut),
+                pt2=normalize(secondjet.pt, cut),
+                msd2=normalize(msd2_matched, cut),
+#                ddb2=normalize(secondjet.btagDDBvL, cut),                      
+                n2ddt2=normalize(secondjet.n2ddt, cut),
                 weight=weight,
             )
             output['templates2'].fill(
@@ -292,17 +296,6 @@ class VH1DProcessor(processor.ProcessorABC):
                 etamu=normalize(abs(leadingmuon.eta),cut),
                 msd1=normalize(msd_matched, cut),
                 ddb1=normalize(candidatejet.btagDDBvL, cut),
-                weight=weight,
-            )
-            output['templates3'].fill(
-                dataset=dataset,
-                region=region,
-                msd1=normalize(msd_matched, cut),
-                ddb1=normalize(candidatejet.btagDDBvL, cut),
-                deta=normalize(deta, cut),
-                mjj=normalize(mjj, cut),
-                qgl1=normalize(qgl1, cut),
-                qgl2=normalize(qgl2, cut),
                 weight=weight,
             )
 
