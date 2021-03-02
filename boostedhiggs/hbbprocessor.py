@@ -48,7 +48,7 @@ class HbbProcessor(processor.ProcessorABC):
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Bin('genflavor', 'Gen. jet flavor', [0, 1, 2, 3, 4]),
-                hist.Bin('cut', 'Cut index', 11, 0, 11),
+                hist.Bin('cut', 'Cut index', 15, 0, 15),
             ),
             'btagWeight': hist.Hist('Events', hist.Cat('dataset', 'Dataset'), hist.Bin('val', 'BTag correction', 50, 0, 3)),
             'templates1': hist.Hist(
@@ -136,7 +136,7 @@ class HbbProcessor(processor.ProcessorABC):
 
         selection.add('minjetkin',
             (candidatejet.pt >= 450)
-            & (candidatejet.msdcorr >= 40.)
+            & (candidatejet.msdcorr >= 47.)
             & (abs(candidatejet.eta) < 2.5)
         )
         selection.add('minjetkin_muoncr',
@@ -145,7 +145,7 @@ class HbbProcessor(processor.ProcessorABC):
             & (abs(candidatejet.eta) < 2.5)
         )
         selection.add('jetacceptance',
-            (candidatejet.msdcorr >= 47.)
+            (candidatejet.msdcorr >= 40.)
             & (candidatejet.pt < 1200)
             & (candidatejet.msdcorr < 201.)
         )
@@ -163,36 +163,44 @@ class HbbProcessor(processor.ProcessorABC):
         dphi = abs(jets.delta_phi(candidatejet))
         selection.add('antiak4btagMediumOppHem', ak.max(jets[dphi > np.pi / 2].btagDeepB, axis=1, mask_identity=False) < BTagEfficiency.btagWPs[self._year]['medium'])
         ak4_away = jets[dphi > 0.8]
-        selection.add('ak4btagMedium08', ak.max(ak4_away.btagDeepB, axis=1, mask_identity=False) > BTagEfficiency.btagWPs[self._year]['medium'])
+        selection.add('ak4btagMedium08', (ak.max(ak4_away.btagCSVV2, axis=1, mask_identity=False) > BTagEfficiency.btagWPs[self._year]['medium']))
 
         selection.add('met', events.MET.pt < 140.)
 
         goodmuon = (
+            (events.Muon.pt > 55)
+            & (abs(events.Muon.eta) < 2.1)
+            & (events.Muon.pfRelIso04_all < 0.25)
+            & events.Muon.looseId
+            & (abs(events.Muon.delta_phi(candidatejet)) > 2*np.pi/3)
+        )
+        candidatemuon = ak.firsts(events.Muon[goodmuon])
+        ngoodmuons = ak.sum(goodmuon,axis = 1)
+
+        nelectrons = ak.sum(
+            (events.Electron.pt > 10.)
+            & (abs(events.Electron.eta) < 2.5) 
+            & (events.Electron.cutBased >= events.Electron.VETO),
+            axis = 1,
+        )
+        nmuons = ak.sum(
             (events.Muon.pt > 10)
             & (abs(events.Muon.eta) < 2.4)
             & (events.Muon.pfRelIso04_all < 0.25)
-            & events.Muon.looseId
+            & events.Muon.looseId,
+            axis = 1,
         )
-        nmuons = ak.sum(goodmuon, axis=1)
-        leadingmuon = ak.firsts(events.Muon[goodmuon])
-
-        nelectrons = ak.sum(
-            (events.Electron.pt > 10)
-            & (abs(events.Electron.eta) < 2.5)
-            & (events.Electron.cutBased >= events.Electron.LOOSE),
-            axis=1,
-        )
-
         ntaus = ak.sum(
-            (events.Tau.pt > 20)
-            & events.Tau.idDecayMode,  # bacon iso looser than Nano selection
-            axis=1,
+            (events.Tau.pt > 20.)
+            & (events.Tau.idDecayMode),
+            axis = 1,
         )
 
         selection.add('noleptons', (nmuons == 0) & (nelectrons == 0) & (ntaus == 0))
-        selection.add('onemuon', (nmuons == 1) & (nelectrons == 0) & (ntaus == 0))
-        selection.add('muonkin', (leadingmuon.pt > 55.) & (abs(leadingmuon.eta) < 2.1))
-        selection.add('muonDphiAK8', abs(leadingmuon.delta_phi(candidatejet)) > 2*np.pi/3)
+        selection.add('noetau', (nelectrons == 0) & (ntaus == 0))
+        selection.add('onemuon', (ngoodmuons == 1))
+#        selection.add('muonkin', ak.any((candidatemuon.pt > 55.) & (abs(candidatemuon.eta) < 2.1), axis=1))
+#        selection.add('muonDphiAK8', ak.any(abs(candidatemuon.delta_phi(candidatejet)) > 2*np.pi/3, axis=1))
 
         if isRealData:
             genflavor = np.zeros(len(events))
@@ -212,7 +220,7 @@ class HbbProcessor(processor.ProcessorABC):
 
         regions = {
             'signal': ['trigger', 'minjetkin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMediumOppHem', 'met', 'noleptons'],
-            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetacceptance', 'jetid', 'n2ddt', 'ak4btagMedium08', 'onemuon', 'muonkin', 'muonDphiAK8'],
+            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetid', 'n2ddt', 'ak4btagMedium08', 'noetau','onemuon'],
             'noselection': [],
         }
 
@@ -237,11 +245,10 @@ class HbbProcessor(processor.ProcessorABC):
         def normalize(val, cut):
             return ak.to_numpy(ak.fill_none(val[cut], np.nan))
 
-        def fill(region, systematic):
+        def fill(region):
             selections = regions[region]
             cut = selection.all(*selections)
-            sname = 'nominal' if systematic is None else systematic
-            weight = weights.weight(modifier=systematic)[cut]
+            weight = weights.weight()[cut]
 
             output['templates1'].fill(
                 dataset=dataset,
@@ -254,16 +261,15 @@ class HbbProcessor(processor.ProcessorABC):
             output['templates2'].fill(
                 dataset=dataset,
                 region=region,
-                ptmu=normalize(leadingmuon.pt, cut),
-                etamu=normalize(abs(leadingmuon.eta),cut),
+                ptmu=normalize(candidatemuon.pt, cut),
+                etamu=normalize(abs(candidatemuon.eta),cut),
                 msd1=normalize(msd_matched, cut),
                 ddb1=normalize(candidatejet.btagDDBvL, cut),
                 weight=weight,
             )
 
         for region in regions:
-            for systematic in systematics:
-                fill(region, systematic)
+            fill(region)
 
         output["weightStats"] = weights.weightStatistics
         return output
