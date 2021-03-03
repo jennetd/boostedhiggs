@@ -21,7 +21,7 @@ from boostedhiggs.corrections import (
 logger = logging.getLogger(__name__)
 
 
-class VBFProcessor(processor.ProcessorABC):
+class VBFddbProcessor(processor.ProcessorABC):
     def __init__(self, year='2017', jet_arbitration='pt'):
         self._year = year
         self._jet_arbitration = jet_arbitration
@@ -57,7 +57,7 @@ class VBFProcessor(processor.ProcessorABC):
                 hist.Cat('region', 'Region'),
                 hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
                 hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
+                hist.Bin('ddb1', r'Jet 1 ddb score', 100, 0, 1),
                 hist.Bin('deta', r'$\Delta\eta_{jj}$', 1, 3.5, 7),
                 hist.Bin('mjj',r'$m_{jj}$ [GeV]', 1, 1000, 4000)
             ),
@@ -139,7 +139,7 @@ class VBFProcessor(processor.ProcessorABC):
 
         selection.add('minjetkin',
             (candidatejet.pt >= 450)
-            & (candidatejet.msdcorr >= 47.)
+            & (candidatejet.msdcorr >= 40.)
             & (abs(candidatejet.eta) < 2.5)
         )
         selection.add('minjetkin_muoncr',
@@ -148,7 +148,7 @@ class VBFProcessor(processor.ProcessorABC):
             & (abs(candidatejet.eta) < 2.5)
         )
         selection.add('jetacceptance',
-            (candidatejet.msdcorr >= 40.)
+            (candidatejet.msdcorr >= 47.)
             & (candidatejet.pt < 1200)
             & (candidatejet.msdcorr < 201.)
         )
@@ -183,47 +183,34 @@ class VBFProcessor(processor.ProcessorABC):
         qgl1 = jet1.qgl
         qgl2 = jet2.qgl
 
-        selection.add('ak4jets', deta>=0)
-        selection.add('deta', deta>3.5 )
-        selection.add('mjj', mjj>1000 )
+        selection.add('ak4jets',deta>=0)
 
         goodmuon = (
-            (events.Muon.pt > 55)
-            & (abs(events.Muon.eta) < 2.4)
-            & (events.Muon.pfRelIso04_all < 0.25)
-            & events.Muon.looseId
-            & (abs(events.Muon.delta_phi(candidatejet)) > 2*np.pi/3)
-        )
-        candidatemuon = ak.firsts(events.Muon[goodmuon])
-        ngoodmuons = ak.sum(goodmuon,axis = 1)
-
-        nelectrons = ak.sum(
-            (events.Electron.pt > 10.)
-            & (abs(events.Electron.eta) < 2.5) 
-            & (events.Electron.cutBased >= events.Electron.VETO),
-            axis = 1,
-        )
-        nmuons = ak.sum(
             (events.Muon.pt > 10)
             & (abs(events.Muon.eta) < 2.4)
             & (events.Muon.pfRelIso04_all < 0.25)
-            & events.Muon.looseId,
-            axis = 1,
+            & events.Muon.looseId
         )
+        nmuons = ak.sum(goodmuon, axis=1)
+        leadingmuon = ak.firsts(events.Muon[goodmuon])
+
+        nelectrons = ak.sum(
+            (events.Electron.pt > 10)
+            & (abs(events.Electron.eta) < 2.5)
+            & (events.Electron.cutBased >= events.Electron.LOOSE),
+            axis=1,
+        )
+
         ntaus = ak.sum(
-            (events.Tau.pt > 20.)
-            & (events.Tau.idDecayMode)
-            & (events.Tau.rawIso < 5)
-            & (abs(events.Tau.eta) < 2.3)
-            & (events.Tau.idMVAoldDM2017v1 >= 16),
-            axis = 1,
-            )
+            (events.Tau.pt > 20)
+            & events.Tau.idDecayMode,  # bacon iso looser than Nano selection
+            axis=1,
+        )
 
         selection.add('noleptons', (nmuons == 0) & (nelectrons == 0) & (ntaus == 0))
-        selection.add('noetau', (nelectrons == 0) & (ntaus == 0))
-        selection.add('onemuon', (ngoodmuons == 1))
-#        selection.add('muonkin', ak.any((candidatemuon.pt > 55.) & (abs(candidatemuon.eta) < 2.1), axis=1))
-#        selection.add('muonDphiAK8', ak.any(abs(candidatemuon.delta_phi(candidatejet)) > 2*np.pi/3, axis=1))
+        selection.add('onemuon', (nmuons == 1) & (nelectrons == 0) & (ntaus == 0))
+        selection.add('muonkin', (leadingmuon.pt > 55.) & (abs(leadingmuon.eta) < 2.1))
+        selection.add('muonDphiAK8', abs(leadingmuon.delta_phi(candidatejet)) > 2*np.pi/3)
 
         if isRealData:
             genflavor = np.zeros(len(events))
@@ -242,8 +229,8 @@ class VBFProcessor(processor.ProcessorABC):
         msd_matched = candidatejet.msdcorr * self._msdSF[self._year] * (genflavor > 0) + candidatejet.msdcorr * (genflavor == 0)
 
         regions = {
-            'signal': ['trigger', 'minjetkin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMediumOppHem', 'met', 'noleptons', 'ak4jets', 'deta', 'mjj'],
-            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetid', 'n2ddt', 'ak4btagMedium08', 'noetau','onemuon','ak4jets', 'deta', 'mjj'],
+            'signal': ['trigger', 'minjetkin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMediumOppHem', 'met', 'noleptons','ak4jets'],
+            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetacceptance', 'jetid', 'n2ddt', 'ak4btagMedium08', 'onemuon', 'muonkin', 'muonDphiAK8', 'ak4jets'],
             'noselection': [],
         }
 
@@ -287,8 +274,8 @@ class VBFProcessor(processor.ProcessorABC):
             output['templates2'].fill(
                 dataset=dataset,
                 region=region,
-                ptmu=normalize(candidatemuon.pt, cut),
-                etamu=normalize(abs(candidatemuon.eta),cut),
+                ptmu=normalize(leadingmuon.pt, cut),
+                etamu=normalize(abs(leadingmuon.eta),cut),
                 msd1=normalize(msd_matched, cut),
                 ddb1=normalize(candidatejet.btagDDBvL, cut),
                 weight=weight,

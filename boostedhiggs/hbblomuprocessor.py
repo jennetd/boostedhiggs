@@ -21,7 +21,7 @@ from boostedhiggs.corrections import (
 logger = logging.getLogger(__name__)
 
 
-class VBFProcessor(processor.ProcessorABC):
+class HbbLowMuPtProcessor(processor.ProcessorABC):
     def __init__(self, year='2017', jet_arbitration='pt'):
         self._year = year
         self._jet_arbitration = jet_arbitration
@@ -48,7 +48,7 @@ class VBFProcessor(processor.ProcessorABC):
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Bin('genflavor', 'Gen. jet flavor', [0, 1, 2, 3, 4]),
-                hist.Bin('cut', 'Cut index', 11, 0, 11),
+                hist.Bin('cut', 'Cut index', 15, 0, 15),
             ),
             'btagWeight': hist.Hist('Events', hist.Cat('dataset', 'Dataset'), hist.Bin('val', 'BTag correction', 50, 0, 3)),
             'templates1': hist.Hist(
@@ -56,10 +56,8 @@ class VBFProcessor(processor.ProcessorABC):
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
-                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
-                hist.Bin('deta', r'$\Delta\eta_{jj}$', 1, 3.5, 7),
-                hist.Bin('mjj',r'$m_{jj}$ [GeV]', 1, 1000, 4000)
+                hist.Bin('msd1', r'Jet $m_{sd}$', 22, 47, 201),
+                hist.Bin('ddb1', r'Jet ddb score', [0, 0.89, 1]),
             ),
             'templates2': hist.Hist(
                 'Events',
@@ -70,7 +68,6 @@ class VBFProcessor(processor.ProcessorABC):
                 hist.Bin('msd1', r'Jet $m_{sd}$', 22, 47, 201),
                 hist.Bin('ddb1', r'Jet ddb score', [0, 0.89, 1]),
             ),
-
         })
 
     @property
@@ -170,25 +167,8 @@ class VBFProcessor(processor.ProcessorABC):
 
         selection.add('met', events.MET.pt < 140.)
 
-        # VBF specific variables
-        dR = jets.delta_r(candidatejet)
-        ak4_outside_ak8 = jets[dR > 0.8]
-
-        jet1 = ak4_outside_ak8[:, 0:1]
-        jet2 = ak4_outside_ak8[:, 1:2]
-
-        # redefine deta to be between ak4 jets                                                               
-        deta = abs(ak.firsts(jet1).eta - ak.firsts(jet2).eta)
-        mjj = ( ak.firsts(jet1) + ak.firsts(jet2) ).mass
-        qgl1 = jet1.qgl
-        qgl2 = jet2.qgl
-
-        selection.add('ak4jets', deta>=0)
-        selection.add('deta', deta>3.5 )
-        selection.add('mjj', mjj>1000 )
-
         goodmuon = (
-            (events.Muon.pt > 55)
+            (events.Muon.pt > 30)
             & (abs(events.Muon.eta) < 2.4)
             & (events.Muon.pfRelIso04_all < 0.25)
             & events.Muon.looseId
@@ -217,7 +197,7 @@ class VBFProcessor(processor.ProcessorABC):
             & (abs(events.Tau.eta) < 2.3)
             & (events.Tau.idMVAoldDM2017v1 >= 16),
             axis = 1,
-            )
+        )
 
         selection.add('noleptons', (nmuons == 0) & (nelectrons == 0) & (ntaus == 0))
         selection.add('noetau', (nelectrons == 0) & (ntaus == 0))
@@ -242,8 +222,8 @@ class VBFProcessor(processor.ProcessorABC):
         msd_matched = candidatejet.msdcorr * self._msdSF[self._year] * (genflavor > 0) + candidatejet.msdcorr * (genflavor == 0)
 
         regions = {
-            'signal': ['trigger', 'minjetkin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMediumOppHem', 'met', 'noleptons', 'ak4jets', 'deta', 'mjj'],
-            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetid', 'n2ddt', 'ak4btagMedium08', 'noetau','onemuon','ak4jets', 'deta', 'mjj'],
+            'signal': ['trigger', 'minjetkin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMediumOppHem', 'met', 'noleptons'],
+            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetid', 'n2ddt', 'ak4btagMedium08', 'noetau','onemuon'],
             'noselection': [],
         }
 
@@ -268,11 +248,10 @@ class VBFProcessor(processor.ProcessorABC):
         def normalize(val, cut):
             return ak.to_numpy(ak.fill_none(val[cut], np.nan))
 
-        def fill(region, systematic):
+        def fill(region):
             selections = regions[region]
             cut = selection.all(*selections)
-            sname = 'nominal' if systematic is None else systematic
-            weight = weights.weight(modifier=systematic)[cut]
+            weight = weights.weight()[cut]
 
             output['templates1'].fill(
                 dataset=dataset,
@@ -280,8 +259,6 @@ class VBFProcessor(processor.ProcessorABC):
                 pt1=normalize(candidatejet.pt, cut),
                 msd1=normalize(msd_matched, cut),
                 ddb1=normalize(candidatejet.btagDDBvL, cut),
-                deta=normalize(deta, cut),
-                mjj=normalize(mjj, cut),
                 weight=weight,
             )
             output['templates2'].fill(
@@ -295,8 +272,7 @@ class VBFProcessor(processor.ProcessorABC):
             )
 
         for region in regions:
-            for systematic in systematics:
-                fill(region, systematic)
+            fill(region)
 
         output["weightStats"] = weights.weightStatistics
         return output

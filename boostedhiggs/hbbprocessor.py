@@ -163,13 +163,13 @@ class HbbProcessor(processor.ProcessorABC):
         dphi = abs(jets.delta_phi(candidatejet))
         selection.add('antiak4btagMediumOppHem', ak.max(jets[dphi > np.pi / 2].btagDeepB, axis=1, mask_identity=False) < BTagEfficiency.btagWPs[self._year]['medium'])
         ak4_away = jets[dphi > 0.8]
-        selection.add('ak4btagMedium08', (ak.max(ak4_away.btagCSVV2, axis=1, mask_identity=False) > BTagEfficiency.btagWPs[self._year]['medium']))
+        selection.add('ak4btagMedium08', ak.max(ak4_away.btagDeepB, axis=1, mask_identity=False) > BTagEfficiency.btagWPs[self._year]['medium'])
 
         selection.add('met', events.MET.pt < 140.)
 
         goodmuon = (
             (events.Muon.pt > 55)
-            & (abs(events.Muon.eta) < 2.1)
+            & (abs(events.Muon.eta) < 2.4)
             & (events.Muon.pfRelIso04_all < 0.25)
             & events.Muon.looseId
             & (abs(events.Muon.delta_phi(candidatejet)) > 2*np.pi/3)
@@ -192,7 +192,10 @@ class HbbProcessor(processor.ProcessorABC):
         )
         ntaus = ak.sum(
             (events.Tau.pt > 20.)
-            & (events.Tau.idDecayMode),
+            & (events.Tau.idDecayMode)
+            & (events.Tau.rawIso < 5)
+            & (abs(events.Tau.eta) < 2.3)
+            & (events.Tau.idMVAoldDM2017v1 >= 16),
             axis = 1,
         )
 
