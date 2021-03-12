@@ -187,43 +187,37 @@ class VBFProcessor(processor.ProcessorABC):
         selection.add('deta', deta>3.5 )
         selection.add('mjj', mjj>1000 )
 
-        goodmuon = (
-            (events.Muon.pt > 55)
-            & (abs(events.Muon.eta) < 2.4)
-            & (events.Muon.pfRelIso04_all < 0.25)
-            & events.Muon.looseId
-            & (abs(events.Muon.delta_phi(candidatejet)) > 2*np.pi/3)
-        )
-        candidatemuon = ak.firsts(events.Muon[goodmuon])
-        ngoodmuons = ak.sum(goodmuon,axis = 1)
+        goodelectron = (
+            (events.Electron.pt > 10)
+            & (abs(events.Electron.eta) < 2.5)
+            & (events.Electron.cutBased >= events.Electron.LOOSE)
+            )
+        nelectrons = ak.sum(goodelectron, axis=1)
 
-        nelectrons = ak.sum(
-            (events.Electron.pt > 10.)
-            & (abs(events.Electron.eta) < 2.5) 
-            & (events.Electron.cutBased >= events.Electron.VETO),
-            axis = 1,
-        )
-        nmuons = ak.sum(
+        goodmuon = (
             (events.Muon.pt > 10)
             & (abs(events.Muon.eta) < 2.4)
             & (events.Muon.pfRelIso04_all < 0.25)
-            & events.Muon.looseId,
-            axis = 1,
+            & events.Muon.looseId
         )
+        nmuons = ak.sum(goodmuon, axis=1)
+        candidatemuon = ak.firsts(events.Muon[goodmuon])
+
         ntaus = ak.sum(
-            (events.Tau.pt > 20.)
-            & (events.Tau.idDecayMode)
-            & (events.Tau.rawIso < 5)
+            (events.Tau.pt > 20)
             & (abs(events.Tau.eta) < 2.3)
-            & (events.Tau.idMVAoldDM2017v1 >= 16),
-            axis = 1,
-            )
+            & events.Tau.idDecayMode
+            & (events.Tau.rawIso < 5)
+            & (events.Tau.idMVAoldDM2017v1 >= 16)
+            & ak.all(events.Tau.metric_table(events.Muon[goodmuon]) > 0.4, axis=2)
+            & ak.all(events.Tau.metric_table(events.Electron[goodelectron]) > 0.4, axis=2)
+        )
 
         selection.add('noleptons', (nmuons == 0) & (nelectrons == 0) & (ntaus == 0))
         selection.add('noetau', (nelectrons == 0) & (ntaus == 0))
-        selection.add('onemuon', (ngoodmuons == 1))
-#        selection.add('muonkin', ak.any((candidatemuon.pt > 55.) & (abs(candidatemuon.eta) < 2.1), axis=1))
-#        selection.add('muonDphiAK8', ak.any(abs(candidatemuon.delta_phi(candidatejet)) > 2*np.pi/3, axis=1))
+        selection.add('onemuon', (nmuons == 1))
+        selection.add('muonkin', (candidatemuon.pt > 55.) & (abs(candidatemuon.eta) < 2.1))
+        selection.add('muonDphiAK8', abs(candidatemuon.delta_phi(candidatejet)) > 2*np.pi/3)
 
         if isRealData:
             genflavor = np.zeros(len(events))
@@ -243,7 +237,7 @@ class VBFProcessor(processor.ProcessorABC):
 
         regions = {
             'signal': ['trigger', 'minjetkin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMediumOppHem', 'met', 'noleptons', 'ak4jets'],
-            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetid', 'n2ddt', 'ak4btagMedium08', 'noetau','onemuon','ak4jets'],
+            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetid', 'n2ddt', 'ak4btagMedium08', 'noetau','onemuon','ak4jets','muonkin','muonDphiAk8'],
             'noselection': [],
         }
 
