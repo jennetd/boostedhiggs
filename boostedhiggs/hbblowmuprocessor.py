@@ -21,7 +21,7 @@ from boostedhiggs.corrections import (
 logger = logging.getLogger(__name__)
 
 
-class HbbProcessor(processor.ProcessorABC):
+class HbbLowMuPtProcessor(processor.ProcessorABC):
     def __init__(self, year='2017', jet_arbitration='pt'):
         self._year = year
         self._jet_arbitration = jet_arbitration
@@ -226,7 +226,7 @@ class HbbProcessor(processor.ProcessorABC):
 
         regions = {
             'signal': ['trigger', 'minjetkin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMediumOppHem', 'met', 'noleptons'],
-            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetacceptance', 'jetid', 'n2ddt', 'ak4btagMedium08', 'noetau','onemuon','muonkin','muonDphiAK8'],
+            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetacceptance', 'jetid', 'n2ddt', 'ak4btagMedium08', 'noetau','onemuon', 'muonkin', 'muonDphiAK8'],
             'noselection': [],
         }
 
