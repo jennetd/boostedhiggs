@@ -265,7 +265,7 @@ class VH1DProcessor(processor.ProcessorABC):
 
         regions = {
             'signal': ['trigger', 'jet1kin', 'jet2kin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMedium', 'met', 'noleptons'],
-            'muoncontrol': ['muontrigger', 'jet1kin_muoncr', 'jet2kin_muoncr', 'jetacceptance', 'jetid', 'n2ddt', 'ak4btagMedium', 'noetau', 'onemuon', 'muonkin', 'muonDphiAk8'],
+            'muoncontrol': ['muontrigger', 'jet1kin_muoncr', 'jet2kin_muoncr', 'jetacceptance', 'jetid', 'n2ddt', 'ak4btagMedium', 'noetau', 'onemuon', 'muonkin', 'muonDphiAK8'],
             'noselection': [],
         }
 
