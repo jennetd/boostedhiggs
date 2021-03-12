@@ -63,10 +63,19 @@ class HbbProcessor(processor.ProcessorABC):
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
-                hist.Bin('ptmu',r'Muon $p_{T}$ [GeV]',100,0,1000),
+                hist.Bin('ptmu',r'Muon $p_{T}$ [GeV]',50,0,500),
                 hist.Bin('etamu',r'Muon $\eta$',20,0,2.5),
-                hist.Bin('msd1', r'Jet $m_{sd}$', 22, 47, 201),
+                hist.Bin('msd1', r'Jet $m_{sd}$',22, 47, 201),
                 hist.Bin('ddb1', r'Jet ddb score', [0, 0.89, 1]),
+            ),
+            'templates3': hist.Hist(
+                'Events',
+                hist.Cat('dataset', 'Dataset'),
+                hist.Cat('region', 'Region'),
+                hist.Bin('msd1', r'Jet $m_{sd}$',22, 47, 201),
+                hist.Bin('pt1',r'Jet $p_T$',[400, 450, 500, 550, 600, 675,800, 1200]),                                         
+                hist.Bin('eta1',r'Jet $eta$',20,0,2.5),                                                                        
+                hist.Bin('ddb1', r'Jet ddb score', 50,0,1),
             ),
         })
 
@@ -260,6 +269,15 @@ class HbbProcessor(processor.ProcessorABC):
                 region=region,
                 ptmu=normalize(candidatemuon.pt, cut),
                 etamu=normalize(abs(candidatemuon.eta),cut),
+                msd1=normalize(msd_matched, cut),
+                ddb1=normalize(candidatejet.btagDDBvL, cut),
+                weight=weight,
+            )
+            output['templates3'].fill(
+                dataset=dataset,
+                region=region,
+                pt1=normalize(candidatejet.pt, cut),
+                eta1=normalize(abs(candidatejet.eta),cut),
                 msd1=normalize(msd_matched, cut),
                 ddb1=normalize(candidatejet.btagDDBvL, cut),
                 weight=weight,
