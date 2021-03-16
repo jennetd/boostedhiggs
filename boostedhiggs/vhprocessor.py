@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class VHProcessor(processor.ProcessorABC):
-    def __init__(self, year='2017', jet_arbitration='revpt'):
+    def __init__(self, year='2017', jet_arbitration='pt'):
         self._year = year
         self._jet_arbitration = jet_arbitration
 
@@ -55,22 +55,25 @@ class VHProcessor(processor.ProcessorABC):
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
-                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 23, 40, 201),
+#                hist.Bin('pt1', r'Jet 1 $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),               
+                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
                 hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
-                hist.Bin('msd2', r'Jet 2 $m_{sd}$', 23, 40, 201),
-                hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.89, 1]),
-                hist.Bin('dR',   r'#Delta R',25,0,10)
+#                hist.Bin('pt2', r'Jet 2 $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
+                hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
+                hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.89, 1]),            
+                hist.Bin('DR', r'$\Delta R$', 6,0,6),
             ),
             'templates2': hist.Hist(
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
-                hist.Bin('ptmu',r'Muon $p_{T}$ [GeV]',100,0,2000),
-                hist.Bin('etamu',r'Muon $\eta$',20,0,3),
-                hist.Bin('msd1', r'Jet $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet ddb score', [0, 0.89, 1]),
+                hist.Bin('ptmu',r'Muon $p_{T}$ [GeV]',20,0,500),
+                hist.Bin('etamu',r'Muon $\eta$',10,0,2.5),
+                hist.Bin('msd1', r'Jet 1 $m_{sd}$',22, 47, 201),
+                hist.Bin('msd2', r'Jet 2 $m_{sd}$',22, 47, 201),
+                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
+                hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.89, 1]),
             ),
-
         })
 
     @property
@@ -144,26 +147,44 @@ class VHProcessor(processor.ProcessorABC):
         else:
             raise RuntimeError("Unknown candidate jet arbitration")
 
-        selection.add('minjetkin',
+        selection.add('jet1kin',
             (candidatejet.pt >= 450)
-            & (candidatejet.msdcorr >= 40.)
+            & (candidatejet.msdcorr >= 47.)
             & (abs(candidatejet.eta) < 2.5)
         )
-        selection.add('minjetkin_muoncr',
+        selection.add('jet2kin',
+            (secondjet.pt >= 400)
+            & (secondjet.msdcorr >= 47.)
+            & (abs(secondjet.eta) < 2.5)
+        )
+        selection.add('jet1kin_muoncr',
             (candidatejet.pt >= 400)
             & (candidatejet.msdcorr >= 40.)
             & (abs(candidatejet.eta) < 2.5)
         )
-        selection.add('jetacceptance',
-            (candidatejet.msdcorr >= 47.)
-            & (candidatejet.pt < 1200)
-            & (candidatejet.msdcorr < 201.)
+        selection.add('jet2kin_muoncr',
+            (secondjet.pt >= 400)
+            & (secondjet.msdcorr >= 40.)
+            & (abs(secondjet.eta) < 2.5)
         )
-        selection.add('jetid', candidatejet.isTight)
-        selection.add('n2ddt', (candidatejet.n2ddt < 0.))
+        selection.add('jetacceptance',
+            (candidatejet.pt < 1200)
+            & (candidatejet.msdcorr < 201.)
+#            & (secondjet.pt < 1200)
+#            & (secondjet.msdcorr >= 75.)
+#            & (secondjet.msdcorr <= 96.)
+        )
+        selection.add('jetid', 
+            candidatejet.isTight
+            & secondjet.isTight
+        )
+        selection.add('n2ddt', 
+            (candidatejet.n2ddt < 0.)
+            & (secondjet.n2ddt < 0.)
+        )
         selection.add('ddbpass', (candidatejet.btagDDBvL >= 0.89))
 
-        dR = candidatejet.delta_r(secondjet)
+        DR = candidatejet.delta_r(secondjet)
 
         jets = events.Jet[
             (events.Jet.pt > 30.)
@@ -175,9 +196,18 @@ class VHProcessor(processor.ProcessorABC):
         dphi = abs(jets.delta_phi(candidatejet))
 #        selection.add('antiak4btagMediumOppHem', ak.max(jets[dphi > np.pi / 2].btagDeepB, axis=1, mask_identity=False) < BTagEfficiency.btagWPs[self._year]['medium'])
         ak4_away = jets[dphi > 0.8]
-#        selection.add('ak4btagMedium08', ak.max(ak4_away.btagDeepB, axis=1, mask_identity=False) > BTagEfficiency.btagWPs[self._year]['medium'])
+
+        selection.add('antiak4btagMedium', ak.max(ak4_away.btagDeepB, axis=1, mask_identity=False) < BTagEfficiency.btagWPs[self._year]['medium'])   
+        selection.add('ak4btagMedium', ak.max(ak4_away.btagDeepB, axis=1, mask_identity=False) > BTagEfficiency.btagWPs[self._year]['medium'])
 
         selection.add('met', events.MET.pt < 140.)
+
+        goodelectron = (
+            (events.Electron.pt > 10)
+            & (abs(events.Electron.eta) < 2.5)
+            & (events.Electron.cutBased >= events.Electron.LOOSE)
+            )
+        nelectrons = ak.sum(goodelectron, axis=1)
 
         goodmuon = (
             (events.Muon.pt > 10)
@@ -186,25 +216,31 @@ class VHProcessor(processor.ProcessorABC):
             & events.Muon.looseId
         )
         nmuons = ak.sum(goodmuon, axis=1)
-        leadingmuon = ak.firsts(events.Muon[goodmuon])
 
-        nelectrons = ak.sum(
-            (events.Electron.pt > 10)
-            & (abs(events.Electron.eta) < 2.5)
-            & (events.Electron.cutBased >= events.Electron.LOOSE),
-            axis=1,
+        goodmuon_cr = (
+            (events.Muon.pt > 55)
+            & (abs(events.Muon.eta) < 2.1)
+            & (events.Muon.pfRelIso04_all < 0.25)
+            & events.Muon.looseId
         )
+        nmuons_cr = ak.sum(goodmuon_cr, axis=1)
+
+        candidatemuon = ak.firsts(events.Muon[goodmuon_cr])
 
         ntaus = ak.sum(
             (events.Tau.pt > 20)
-            & events.Tau.idDecayMode,  # bacon iso looser than Nano selection
-            axis=1,
+            & (abs(events.Tau.eta) < 2.3)
+            & events.Tau.idDecayMode
+            & (events.Tau.rawIso < 5)
+            & (events.Tau.idMVAoldDM2017v1 >= 16)
+            & ak.all(events.Tau.metric_table(events.Muon[goodmuon]) > 0.4, axis=2)
+            & ak.all(events.Tau.metric_table(events.Electron[goodelectron]) > 0.4, axis=2)
         )
 
         selection.add('noleptons', (nmuons == 0) & (nelectrons == 0) & (ntaus == 0))
-        selection.add('onemuon', (nmuons == 1) & (nelectrons == 0) & (ntaus == 0))
-        selection.add('muonkin', (leadingmuon.pt > 55.) & (abs(leadingmuon.eta) < 2.1))
-        selection.add('muonDphiAK8', abs(leadingmuon.delta_phi(candidatejet)) > 2*np.pi/3)
+        selection.add('noetau', (nelectrons == 0) & (ntaus == 0))
+        selection.add('onemuon', (nmuons_cr == 1))
+        selection.add('muonDphiAK8', abs(candidatemuon.delta_phi(candidatejet)) > 2*np.pi/3)
 
         if isRealData:
             genflavor = np.zeros(len(events))
@@ -230,8 +266,8 @@ class VHProcessor(processor.ProcessorABC):
         msd2_matched = secondjet.msdcorr * self._msdSF[self._year] * (genflavor2 > 0) + secondjet.msdcorr * (genflavor2 == 0)
 
         regions = {
-            'signal': ['trigger', 'minjetkin', 'jetacceptance', 'jetid', 'n2ddt', 'met', 'noleptons'],
-            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetacceptance', 'jetid', 'n2ddt',  'onemuon', 'muonkin', 'muonDphiAK8'],
+            'signal': ['trigger', 'jet1kin', 'jet2kin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMedium', 'met', 'noleptons'],
+            'muoncontrol': ['muontrigger', 'jet1kin_muoncr', 'jet2kin_muoncr', 'jetacceptance', 'jetid', 'n2ddt', 'ak4btagMedium', 'noetau', 'onemuon', 'muonDphiAK8'],
             'noselection': [],
         }
 
@@ -265,20 +301,24 @@ class VHProcessor(processor.ProcessorABC):
             output['templates1'].fill(
                 dataset=dataset,
                 region=region,
+#                pt1=normalize(candidatejet.pt, cut),                           
                 msd1=normalize(msd_matched, cut),
                 ddb1=normalize(candidatejet.btagDDBvL, cut),
+#                pt2=normalize(secondjet.pt, cut),
                 msd2=normalize(msd2_matched, cut),
-                ddb2=normalize(secondjet.btagDDBvL, cut),
-                dR=normalize(dR, cut),
+                ddb2=normalize(secondjet.btagDDBvL, cut),                      
+                DR=normalize(DR,cut),
                 weight=weight,
             )
             output['templates2'].fill(
                 dataset=dataset,
                 region=region,
-                ptmu=normalize(leadingmuon.pt, cut),
-                etamu=normalize(abs(leadingmuon.eta),cut),
+                ptmu=normalize(candidatemuon.pt, cut),
+                etamu=normalize(abs(candidatemuon.eta),cut),
                 msd1=normalize(msd_matched, cut),
                 ddb1=normalize(candidatejet.btagDDBvL, cut),
+                msd2=normalize(msd2_matched, cut),
+                ddb2=normalize(secondjet.btagDDBvL, cut),
                 weight=weight,
             )
 

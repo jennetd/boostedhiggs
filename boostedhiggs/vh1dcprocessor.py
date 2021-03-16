@@ -5,6 +5,7 @@ import json
 from coffea import processor, hist
 from coffea.analysis_tools import Weights, PackedSelection
 from boostedhiggs.btag import BTagEfficiency, BTagCorrector
+from boostedhiggs.ctag import CTagEfficiency, CTagCorrector
 from boostedhiggs.common import (
     getBosons,
     bosonFlavor,
@@ -21,12 +22,13 @@ from boostedhiggs.corrections import (
 logger = logging.getLogger(__name__)
 
 
-class HbbLooseTauProcessor(processor.ProcessorABC):
-    def __init__(self, year='2017', jet_arbitration='pt'):
+class VH1DcProcessor(processor.ProcessorABC):
+    def __init__(self, year='2017', jet_arbitration='revpt'):
         self._year = year
         self._jet_arbitration = jet_arbitration
 
         self._btagSF = BTagCorrector(year, 'medium')
+        self._ctagSF = CTagCorrector(year, 'medium')
 
         self._msdSF = {
             '2016': 1.,
@@ -48,26 +50,31 @@ class HbbLooseTauProcessor(processor.ProcessorABC):
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Bin('genflavor', 'Gen. jet flavor', [0, 1, 2, 3, 4]),
-                hist.Bin('cut', 'Cut index', 15, 0, 15),
+                hist.Bin('cut', 'Cut index', 11, 0, 11),
             ),
             'btagWeight': hist.Hist('Events', hist.Cat('dataset', 'Dataset'), hist.Bin('val', 'BTag correction', 50, 0, 3)),
             'templates1': hist.Hist(
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
-                hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
-                hist.Bin('msd1', r'Jet $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet ddb score', [0, 0.89, 1]),
+#                hist.Bin('pt1', r'Jet 1 $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),               
+                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
+                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
+                hist.Bin('pt2', r'Jet 2 $p_{T}$ [GeV]', [300, 350, 400, 450, 500, 550, 600, 675, 800, 1200]),
+                hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
+#                hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.89, 1]),            
+                hist.Bin('n2ddt2',r'Jet 2 N2DDT', [-0.25, 0, 0.25]),
             ),
             'templates2': hist.Hist(
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
-                hist.Bin('ptmu',r'Muon $p_{T}$ [GeV]',100,0,2000),
-                hist.Bin('etamu',r'Muon $\eta$',20,0,3),
+                hist.Bin('ptmu',r'Muon $p_{T}$ [GeV]',100,0,1000),
+                hist.Bin('etamu',r'Muon $\eta$',20,0,2.5),
                 hist.Bin('msd1', r'Jet $m_{sd}$', 22, 47, 201),
                 hist.Bin('ddb1', r'Jet ddb score', [0, 0.89, 1]),
             ),
+
         })
 
     @property
@@ -117,12 +124,19 @@ class HbbLooseTauProcessor(processor.ProcessorABC):
             & (abs(fatjets.eta) < 2.5)
             & fatjets.isTight  # this is loose in sampleContainer
         ]
+
         if self._jet_arbitration == 'pt':
-            candidatejet = ak.firsts(candidatejet)
+            secondjet = ak.firsts(candidatejet[:, 1:2])
+            candidatejet = ak.firsts(candidatejet[:, 0:1])
+        elif self._jet_arbitration == 'revpt':
+            secondjet = ak.firsts(candidatejet[:, 0:1])
+            candidatejet = ak.firsts(candidatejet[:, 1:2])
         elif self._jet_arbitration == 'mass':
-            candidatejet = candidatejet[
-                ak.argmax(candidatejet.msdcorr)
-            ]
+            idx = (candidatejet.msdcorr).argsort()
+            idx0 = idx[:,0:1]
+            idx1 = idx[:,1:2]
+            secondjet = ak.firsts(candidatejet[idx1])
+            candidatejet = ak.firsts(candidatejet[idx0])
         elif self._jet_arbitration == 'n2':
             candidatejet = candidatejet[
                 ak.argmin(candidatejet.n2ddt)
@@ -134,23 +148,41 @@ class HbbLooseTauProcessor(processor.ProcessorABC):
         else:
             raise RuntimeError("Unknown candidate jet arbitration")
 
-        selection.add('minjetkin',
+        selection.add('jet1kin',
             (candidatejet.pt >= 450)
             & (candidatejet.msdcorr >= 47.)
             & (abs(candidatejet.eta) < 2.5)
         )
-        selection.add('minjetkin_muoncr',
+        selection.add('jet2kin',
+            (secondjet.pt >= 450)
+            & (secondjet.msdcorr >= 47.)
+            & (abs(secondjet.eta) < 2.5)
+        )
+        selection.add('jet1kin_muoncr',
             (candidatejet.pt >= 400)
             & (candidatejet.msdcorr >= 40.)
             & (abs(candidatejet.eta) < 2.5)
         )
-        selection.add('jetacceptance',
-            (candidatejet.msdcorr >= 40.)
-            & (candidatejet.pt < 1200)
-            & (candidatejet.msdcorr < 201.)
+        selection.add('jet2kin_muoncr',
+            (secondjet.pt >= 400)
+            & (secondjet.msdcorr >= 40.)
+            & (abs(secondjet.eta) < 2.5)
         )
-        selection.add('jetid', candidatejet.isTight)
-        selection.add('n2ddt', (candidatejet.n2ddt < 0.))
+        selection.add('jetacceptance',
+            (candidatejet.pt < 1200)
+            & (candidatejet.msdcorr < 201.)
+#            & (secondjet.pt < 1200)
+#            & (secondjet.msdcorr >= 75.)
+#            & (secondjet.msdcorr <= 96.)
+        )
+        selection.add('jetid', 
+            candidatejet.isTight
+            & secondjet.isTight
+        )
+        selection.add('n2ddt', 
+            (candidatejet.n2ddt < 0.)
+            & (secondjet.n2ddt < 0.)
+        )
         selection.add('ddbpass', (candidatejet.btagDDBvL >= 0.89))
 
         jets = events.Jet[
@@ -161,9 +193,11 @@ class HbbLooseTauProcessor(processor.ProcessorABC):
         # only consider first 4 jets to be consistent with old framework
         jets = jets[:, :4]
         dphi = abs(jets.delta_phi(candidatejet))
-        selection.add('antiak4btagMediumOppHem', ak.max(jets[dphi > np.pi / 2].btagDeepB, axis=1, mask_identity=False) < BTagEfficiency.btagWPs[self._year]['medium'])
+#        selection.add('antiak4btagMediumOppHem', ak.max(jets[dphi > np.pi / 2].btagDeepB, axis=1, mask_identity=False) < BTagEfficiency.btagWPs[self._year]['medium'])
         ak4_away = jets[dphi > 0.8]
-        selection.add('ak4btagMedium08', ak.max(ak4_away.btagDeepB, axis=1, mask_identity=False) > BTagEfficiency.btagWPs[self._year]['medium'])
+
+        selection.add('antiak4btagMedium', ak.max(ak4_away.btagDeepB, axis=1, mask_identity=False) < BTagEfficiency.btagWPs[self._year]['medium'])   
+        selection.add('ak4btagMedium', ak.max(ak4_away.btagDeepB, axis=1, mask_identity=False) > BTagEfficiency.btagWPs[self._year]['medium'])
 
         selection.add('met', events.MET.pt < 140.)
 
@@ -192,10 +226,10 @@ class HbbLooseTauProcessor(processor.ProcessorABC):
         )
         ntaus = ak.sum(
             (events.Tau.pt > 20.)
-            & (events.Tau.idDecayMode),
-#            & (events.Tau.rawIso < 5)
-#            & (abs(events.Tau.eta) < 2.3)
-#            & (events.Tau.idMVAoldDM2017v1 >= 16),
+            & (events.Tau.idDecayMode)
+            & (events.Tau.rawIso < 5)
+            & (abs(events.Tau.eta) < 2.3)
+            & (events.Tau.idMVAoldDM2017v1 >= 16),
             axis = 1,
         )
 
@@ -207,12 +241,18 @@ class HbbLooseTauProcessor(processor.ProcessorABC):
 
         if isRealData:
             genflavor = np.zeros(len(events))
+            genflavor2 = np.zeros(len(events))
         else:
             weights.add('genweight', events.genWeight)
             add_pileup_weight(weights, events.Pileup.nPU, self._year, dataset)
             bosons = getBosons(events.GenPart)
+
             matchedBoson = candidatejet.nearest(bosons, axis=None, threshold=0.8)
             genflavor = bosonFlavor(matchedBoson)
+
+            matchedBoson2 = secondjet.nearest(bosons, axis=None, threshold=0.8)
+            genflavor2 = bosonFlavor(matchedBoson2)
+
             genBosonPt = ak.fill_none(ak.firsts(bosons.pt), 0)
             add_VJets_NLOkFactor(weights, genBosonPt, self._year, dataset)
             add_jetTriggerWeight(weights, candidatejet.msdcorr, candidatejet.pt, self._year)
@@ -220,10 +260,11 @@ class HbbLooseTauProcessor(processor.ProcessorABC):
             logger.debug("Weight statistics: %r" % weights.weightStatistics)
 
         msd_matched = candidatejet.msdcorr * self._msdSF[self._year] * (genflavor > 0) + candidatejet.msdcorr * (genflavor == 0)
+        msd2_matched = secondjet.msdcorr * self._msdSF[self._year] * (genflavor2 > 0) + secondjet.msdcorr * (genflavor2 == 0)
 
         regions = {
-            'signal': ['trigger', 'minjetkin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMediumOppHem', 'met', 'noleptons'],
-            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetid', 'n2ddt', 'ak4btagMedium08', 'noetau','onemuon'],
+            'signal': ['trigger', 'jet1kin', 'jet2kin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMedium', 'met', 'noleptons'],
+            'muoncontrol': ['muontrigger', 'jet1kin_muoncr', 'jet2kin_muoncr', 'jetid', 'n2ddt', 'ak4btagMedium', 'noetau', 'onemuon'],
             'noselection': [],
         }
 
@@ -248,17 +289,22 @@ class HbbLooseTauProcessor(processor.ProcessorABC):
         def normalize(val, cut):
             return ak.to_numpy(ak.fill_none(val[cut], np.nan))
 
-        def fill(region):
+        def fill(region, systematic):
             selections = regions[region]
             cut = selection.all(*selections)
-            weight = weights.weight()[cut]
+            sname = 'nominal' if systematic is None else systematic
+            weight = weights.weight(modifier=systematic)[cut]
 
             output['templates1'].fill(
                 dataset=dataset,
                 region=region,
-                pt1=normalize(candidatejet.pt, cut),
+#                pt1=normalize(candidatejet.pt, cut),                           
                 msd1=normalize(msd_matched, cut),
                 ddb1=normalize(candidatejet.btagDDBvL, cut),
+                pt2=normalize(secondjet.pt, cut),
+                msd2=normalize(msd2_matched, cut),
+#                ddb2=normalize(secondjet.btagDDBvL, cut),                      
+                n2ddt2=normalize(secondjet.n2ddt, cut),
                 weight=weight,
             )
             output['templates2'].fill(
@@ -272,7 +318,8 @@ class HbbLooseTauProcessor(processor.ProcessorABC):
             )
 
         for region in regions:
-            fill(region)
+            for systematic in systematics:
+                fill(region, systematic)
 
         output["weightStats"] = weights.weightStatistics
         return output

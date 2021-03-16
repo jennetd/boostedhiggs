@@ -222,7 +222,16 @@ class VH1DProcessor(processor.ProcessorABC):
             & events.Muon.looseId
         )
         nmuons = ak.sum(goodmuon, axis=1)
-        candidatemuon = ak.firsts(events.Muon[goodmuon])
+
+        goodmuon_cr = (
+            (events.Muon.pt > 55)
+            & (abs(events.Muon.eta) < 2.1)
+            & (events.Muon.pfRelIso04_all < 0.25)
+            & events.Muon.looseId
+        )
+        nmuons_cr = ak.sum(goodmuon_cr, axis=1)
+
+        candidatemuon = ak.firsts(events.Muon[goodmuon_cr])
 
         ntaus = ak.sum(
             (events.Tau.pt > 20)
@@ -236,8 +245,7 @@ class VH1DProcessor(processor.ProcessorABC):
 
         selection.add('noleptons', (nmuons == 0) & (nelectrons == 0) & (ntaus == 0))
         selection.add('noetau', (nelectrons == 0) & (ntaus == 0))
-        selection.add('onemuon', (nmuons == 1))
-        selection.add('muonkin', (candidatemuon.pt > 55.) & (abs(candidatemuon.eta) < 2.1))
+        selection.add('onemuon', (nmuons_cr == 1))
         selection.add('muonDphiAK8', abs(candidatemuon.delta_phi(candidatejet)) > 2*np.pi/3)
 
         if isRealData:
@@ -265,7 +273,7 @@ class VH1DProcessor(processor.ProcessorABC):
 
         regions = {
             'signal': ['trigger', 'jet1kin', 'jet2kin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMedium', 'met', 'noleptons'],
-            'muoncontrol': ['muontrigger', 'jet1kin_muoncr', 'jet2kin_muoncr', 'jetacceptance', 'jetid', 'n2ddt', 'ak4btagMedium', 'noetau', 'onemuon', 'muonkin', 'muonDphiAK8'],
+            'muoncontrol': ['muontrigger', 'jet1kin_muoncr', 'jet2kin_muoncr', 'jetacceptance', 'jetid', 'n2ddt', 'ak4btagMedium', 'noetau', 'onemuon', 'muonDphiAK8'],
             'noselection': [],
         }
 

@@ -55,7 +55,7 @@ class HbbProcessor(processor.ProcessorABC):
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
-                hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
+                hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
                 hist.Bin('msd1', r'Jet $m_{sd}$', 22, 47, 201),
                 hist.Bin('ddb1', r'Jet ddb score', [0, 0.89, 1]),
             ),
@@ -190,7 +190,15 @@ class HbbProcessor(processor.ProcessorABC):
             & events.Muon.looseId
         )
         nmuons = ak.sum(goodmuon, axis=1)
-        candidatemuon = ak.firsts(events.Muon[goodmuon])
+
+        goodmuon_cr = (
+            (events.Muon.pt > 55)
+            & (abs(events.Muon.eta) < 2.1)
+            & (events.Muon.pfRelIso04_all < 0.25)
+            & events.Muon.looseId
+        )
+        nmuons_cr = ak.sum(goodmuon_cr, axis=1)
+        candidatemuon = ak.firsts(events.Muon[goodmuon_cr])
 
         ntaus = ak.sum(
             (events.Tau.pt > 20)
@@ -199,13 +207,13 @@ class HbbProcessor(processor.ProcessorABC):
             & (events.Tau.rawIso < 5)
             & (events.Tau.idMVAoldDM2017v1 >= 16)
             & ak.all(events.Tau.metric_table(events.Muon[goodmuon]) > 0.4, axis=2)
-            & ak.all(events.Tau.metric_table(events.Electron[goodelectron]) > 0.4, axis=2)
+            & ak.all(events.Tau.metric_table(events.Electron[goodelectron]) > 0.4, axis=2),
+            axis=1
         )
 
         selection.add('noleptons', (nmuons == 0) & (nelectrons == 0) & (ntaus == 0))
         selection.add('noetau', (nelectrons == 0) & (ntaus == 0))
-        selection.add('onemuon', (nmuons == 1))
-        selection.add('muonkin', (candidatemuon.pt > 55.) & (abs(candidatemuon.eta) < 2.1))
+        selection.add('onemuon', (nmuons_cr == 1))
         selection.add('muonDphiAK8', abs(candidatemuon.delta_phi(candidatejet)) > 2*np.pi/3)
 
         if isRealData:
@@ -226,7 +234,7 @@ class HbbProcessor(processor.ProcessorABC):
 
         regions = {
             'signal': ['trigger', 'minjetkin', 'jetacceptance', 'jetid', 'n2ddt', 'antiak4btagMediumOppHem', 'met', 'noleptons'],
-            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetacceptance','jetid', 'n2ddt', 'ak4btagMedium08', 'noetau','onemuon','muonkin','muonDphiAK8'],
+            'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetacceptance','jetid', 'n2ddt', 'ak4btagMedium08', 'noetau', 'onemuon', 'muonDphiAK8'],
             'noselection': [],
         }
 
