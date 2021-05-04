@@ -50,7 +50,6 @@ def n2ddt_shift(fatjets, year='2017'):
 def powheg_to_nnlops(genpt):
     return compiled['powheg_to_nnlops'](genpt)
 
-
 def add_pileup_weight(weights, nPU, year='2017', dataset=None):
     if year == '2017' and dataset in compiled['2017_pileupweight_dataset']:
         weights.add(
@@ -67,6 +66,26 @@ def add_pileup_weight(weights, nPU, year='2017', dataset=None):
             compiled[f'{year}_pileupweight_puDown'](nPU),
         )
 
+def add_PS_weight(weights,ps_weights,year='2017'):
+
+    nom  = np.ones(len(weights.weight()))
+    up   = np.ones(len(weights.weight()))
+    down = np.ones(len(weights.weight()))
+
+    if len(ps_weights[0]) == 4:
+        up_isr = ps_weights[:,0]
+        down_isr = ps_weights[:,2]
+
+        up_fsr = ps_weights[:,1]
+        down_fsr = ps_weights[:,3]
+        
+        up = np.maximum(up_isr, up_fsr)
+        down = np.minimum(down_isr, down_fsr)
+
+    elif len(ps_weights[0]) > 1:
+        print("PS weight vector has length ", len(ps_weights[0]))
+
+    weights.add('PS_weight', nom, up, down)
 
 def add_VJets_NLOkFactor(weights, genBosonPt, year, dataset):
     if year == '2017' and 'ZJetsToQQ_HT' in dataset:
@@ -90,6 +109,7 @@ def add_jetTriggerWeight(weights, jet_msd, jet_pt, year):
     nom = compiled[f'{year}_trigweight_msd_pt'](jet_msd, jet_pt)
     up = compiled[f'{year}_trigweight_msd_pt_trigweightUp'](jet_msd, jet_pt)
     down = compiled[f'{year}_trigweight_msd_pt_trigweightDown'](jet_msd, jet_pt)
+
     weights.add('jet_trigger', nom, up, down)
 
 
