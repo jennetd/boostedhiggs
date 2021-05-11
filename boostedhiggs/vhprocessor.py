@@ -16,7 +16,6 @@ from boostedhiggs.corrections import (
     corrected_msoftdrop,
     n2ddt_shift,
     powheg_to_nnlops,
-    add_PS_weight,
     add_pileup_weight,
     add_VJets_NLOkFactor,
     add_jetTriggerWeight,
@@ -92,34 +91,22 @@ class VHProcessor(processor.ProcessorABC):
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Cat('systematic', 'Systematic'),
-                hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
-                hist.Bin('msd1', r'Jet $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet ddb score', [0, 0.89, 1]),
-                hist.Bin('DR',r'$Delta R$', 12, 0, 12),
+                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
+                hist.Bin('pt1', r'Jet 1 $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
+                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
+                hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
             ),
             'templates-vh-1': hist.Hist(
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
-#                hist.Cat('systematic', 'Systematic'),
                 hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
                 hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
                 hist.Bin('pt1', r'Jet 1 $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
                 hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
                 hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.89, 1]),
                 hist.Bin('pt2', r'Jet 2 $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
-            ),
-            'templates-vh-2': hist.Hist(
-                'Events',
-                hist.Cat('dataset', 'Dataset'),
-                hist.Cat('region', 'Region'),
-#                hist.Cat('systematic', 'Systematic'),
-                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
-                hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.89, 1]),
-                hist.Bin('ddcvb1', r'Jet 1 ddcvb score', 5,0,1),
-                hist.Bin('ddcvb2', r'Jet 2 ddcvb score', 5,0,1),
+#                hist.Bin('DR', r'$\Delta $$',8,0,8),
             ),
         })
 
@@ -173,7 +160,6 @@ class VHProcessor(processor.ProcessorABC):
             for t in self._triggers[self._year]:
                 if t in events.HLT.fields:
                     trigger = trigger | events.HLT[t]
-            # print(f"Lumipass: {np.sum(lumi_mask)}/{len(lumi_mask)}")
         else:
             trigger = np.ones(len(events), dtype='bool')
             lumi_mask  = np.ones(len(events), dtype='bool')
@@ -186,7 +172,6 @@ class VHProcessor(processor.ProcessorABC):
             for t in self._muontriggers[self._year]:
                 if t in events.HLT.fields:
                     trigger = trigger | events.HLT[t]
-            # print(f"Lumipass: {np.sum(lumi_mask)}/{len(lumi_mask)}")
         else:
             trigger = np.ones(len(events), dtype='bool')
             lumi_mask  = np.ones(len(events), dtype='bool')
@@ -208,6 +193,18 @@ class VHProcessor(processor.ProcessorABC):
         if self._jet_arbitration == 'pt':
             secondjet = ak.firsts(candidatejet[:, 1:2])
             candidatejet = ak.firsts(candidatejet)
+
+        if self._jet_arbitration == 'ddcvb':
+            
+            leadingjets = candidatejet[:, 0:2]
+            # ascending = true
+            indices = ak.argsort(leadingjets.btagDDCvBV2,axis=1)
+
+            # candidate jet is more b-like
+            candidatejet = ak.firsts(leadingjets[indices[:, 0:1]])
+            # second jet is more charm-like
+            secondjet = ak.firsts(leadingjets[indices[:, 1:2]])
+
         else:
             raise RuntimeError("Unknown candidate jet arbitration")
 
@@ -317,7 +314,6 @@ class VHProcessor(processor.ProcessorABC):
         else:
             weights.add('genweight', events.genWeight)
             add_pileup_weight(weights, events.Pileup.nPU, self._year, dataset)
-            add_PS_weight(weights, events.PSWeight, self._year)
             bosons = getBosons(events.GenPart)
             matchedBoson = candidatejet.nearest(bosons, axis=None, threshold=0.8)
             matchedBoson2 = secondjet.nearest(bosons, axis=None, threshold=0.8)
@@ -376,8 +372,6 @@ class VHProcessor(processor.ProcessorABC):
                 'btagWeightDown',
                 'btagEffStatUp',
                 'btagEffStatDown',
-                'PS_weightUp',
-                'PS_weightDown',
             ]
         else:
             systematics = [shift_name]
@@ -400,12 +394,12 @@ class VHProcessor(processor.ProcessorABC):
                 systematic=sname,
                 pt1=normalize(candidatejet.pt, cut),
                 msd1=normalize(msd_matched, cut),
+                msd2=normalize(msd2_matched, cut),
                 ddb1=normalize(candidatejet.btagDDBvL, cut),
-                DR=normalize(DR, cut),
                 weight=weight,
             )
 
-            if sname == 'nominal':
+            if sname == "nominal":
                 output['templates-vh-1'].fill(
                     dataset=dataset,
                     region=region,
@@ -415,17 +409,7 @@ class VHProcessor(processor.ProcessorABC):
                     msd2=normalize(msd2_matched, cut),
                     ddb2=normalize(secondjet.btagDDBvL, cut),
                     pt2=normalize(secondjet.pt, cut),
-                    weight=weight,
-                )
-                output['templates-vh-2'].fill(
-                    dataset=dataset,
-                    region=region,
-                    msd1=normalize(msd_matched, cut),
-                    ddb1=normalize(candidatejet.btagDDBvL, cut),
-                    ddcvb1=normalize(candidatejet.btagDDCvBV2, cut),
-                    msd2=normalize(msd2_matched, cut),
-                    ddb2=normalize(secondjet.btagDDBvL, cut),
-                    ddcvb2=normalize(secondjet.btagDDCvBV2, cut),
+#                    DR=normalize(DR, cut),
                     weight=weight,
                 )
 
