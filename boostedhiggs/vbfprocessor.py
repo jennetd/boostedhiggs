@@ -16,7 +16,6 @@ from boostedhiggs.corrections import (
     corrected_msoftdrop,
     n2ddt_shift,
     powheg_to_nnlops,
-    add_PS_weight,
     add_pileup_weight,
     add_VJets_NLOkFactor,
     add_jetTriggerWeight,
@@ -98,17 +97,17 @@ class VBFProcessor(processor.ProcessorABC):
                 hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
                 hist.Bin('mjj', r'$m_{jj}$',[0,350,500,1000,2000,3000,4000]),
             ),
-            'templates-vbf-2': hist.Hist(
-                'Events',
-                hist.Cat('dataset', 'Dataset'),
-                hist.Cat('region', 'Region'),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
-                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('qgl1', r'Jet 1 QGL', 10, 0, 1),
-                hist.Bin('qgl2', r'Jet 2 QGL', 10, 0, 1),
-                hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
-                hist.Bin('mjj', r'$m_{jj}$',8,0,4000)
-            ),
+#            'templates-vbf-2': hist.Hist(
+#                'Events',
+#                hist.Cat('dataset', 'Dataset'),
+#                hist.Cat('region', 'Region'),
+#                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
+#                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
+#                hist.Bin('qgl1', r'Jet 1 QGL', 10, 0, 1),
+#                hist.Bin('qgl2', r'Jet 2 QGL', 10, 0, 1),
+#                hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
+#                hist.Bin('mjj', r'$m_{jj}$',8,0,4000)
+#            ),
         })
 
     @property
@@ -260,6 +259,7 @@ class VBFProcessor(processor.ProcessorABC):
         qgl1 = ak.firsts(jet1.qgl)
         qgl2 = ak.firsts(jet2.qgl)
 
+        selection.add('ak4jets', deta > 0)
         selection.add('deta', deta > 3.5)
         selection.add('mjj', mjj > 1000)
 
@@ -310,7 +310,6 @@ class VBFProcessor(processor.ProcessorABC):
         else:
             weights.add('genweight', events.genWeight)
             add_pileup_weight(weights, events.Pileup.nPU, self._year, dataset)
-            add_PS_weight(weights, events.PSWeight, self._year)
             bosons = getBosons(events.GenPart)
             matchedBoson = candidatejet.nearest(bosons, axis=None, threshold=0.8)
             if self._tightMatch:
@@ -329,10 +328,8 @@ class VBFProcessor(processor.ProcessorABC):
         msd_matched = candidatejet.msdcorr * self._msdSF[self._year] * (genflavor > 0) + candidatejet.msdcorr * (genflavor == 0)
 
         regions = {
-            'signal': ['trigger','lumimask','minjetkin','jetid','jetacceptance','n2ddt','antiak4btagMediumOppHem','met','noleptons'],
-            'signal-vbf': ['trigger','lumimask','minjetkin','jetid','jetacceptance','n2ddt','antiak4btagMediumOppHem','met','noleptons','deta','mjj'],
+            'signal': ['trigger','lumimask','minjetkin','jetid','jetacceptance','n2ddt','antiak4btagMediumOppHem','met','noleptons','ak4jets'],
             'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetid', 'n2ddt', 'ak4btagMedium08', 'noetau', 'onemuon', 'muonDphiAK8'],
-#            'noselection': [],
         }
 
         def normalize(val, cut):
@@ -364,8 +361,6 @@ class VBFProcessor(processor.ProcessorABC):
                 'btagWeightDown',
                 'btagEffStatUp',
                 'btagEffStatDown',
-                'PS_weightUp',
-                'PS_weightDown',
             ]
         else:
             systematics = [shift_name]
@@ -394,18 +389,18 @@ class VBFProcessor(processor.ProcessorABC):
                 weight=weight,
             )
 
-            if sname == 'nominal':
-                output['templates-vbf-2'].fill(
-                    dataset=dataset,
-                    region=region,
-                    ddb1=normalize(candidatejet.btagDDBvL, cut),
-                    msd1=normalize(msd_matched, cut),
-                    qgl1=normalize(qgl1, cut),
-                    qgl2=normalize(qgl2, cut),
-                    deta=normalize(deta, cut),
-                    mjj=normalize(mjj, cut),
-                    weight=weight,
-                )
+#            if sname == 'nominal':
+#                output['templates-vbf-2'].fill(
+#                    dataset=dataset,
+#                    region=region,
+#                    ddb1=normalize(candidatejet.btagDDBvL, cut),
+#                    msd1=normalize(msd_matched, cut),
+#                    qgl1=normalize(qgl1, cut),
+#                    qgl2=normalize(qgl2, cut),
+#                    deta=normalize(deta, cut),
+#                    mjj=normalize(mjj, cut),
+#                    weight=weight,
+#                )
 
         for region in regions:
             for systematic in systematics:

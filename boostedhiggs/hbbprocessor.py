@@ -16,7 +16,6 @@ from boostedhiggs.corrections import (
     corrected_msoftdrop,
     n2ddt_shift,
     powheg_to_nnlops,
-    add_PS_weight,
     add_pileup_weight,
     add_VJets_NLOkFactor,
     add_jetTriggerWeight,
@@ -306,7 +305,6 @@ class HbbProcessor(processor.ProcessorABC):
         else:
             weights.add('genweight', events.genWeight)
             add_pileup_weight(weights, events.Pileup.nPU, self._year, dataset)
-            add_PS_weight(weights, events.PSWeight, self._year)
             bosons = getBosons(events.GenPart)
             matchedBoson = candidatejet.nearest(bosons, axis=None, threshold=0.8)
             if self._tightMatch:
@@ -358,8 +356,6 @@ class HbbProcessor(processor.ProcessorABC):
                 'btagWeightDown',
                 'btagEffStatUp',
                 'btagEffStatDown',
-                'PS_weightUp',
-                'PS_weightDown',
             ]
         else:
             systematics = [shift_name]

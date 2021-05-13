@@ -16,7 +16,6 @@ from boostedhiggs.corrections import (
     corrected_msoftdrop,
     n2ddt_shift,
     powheg_to_nnlops,
-    add_PS_weight,
     add_pileup_weight,
     add_VJets_NLOkFactor,
     add_jetTriggerWeight,
@@ -87,23 +86,12 @@ class VBFmuProcessor(processor.ProcessorABC):
 #                hist.Bin('msd', r'Jet $m_{sd}$', 22, 47, 201),          
             ),
             'btagWeight': hist.Hist('Events', hist.Cat('dataset', 'Dataset'), hist.Bin('val', 'BTag correction', 50, 0, 3)),
-            'templates-vbf': hist.Hist(
-                'Events',
-                hist.Cat('dataset', 'Dataset'),
-                hist.Cat('region', 'Region'),
-                hist.Cat('systematic', 'Systematic'),
-                hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
-                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
-                hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
-                hist.Bin('mjj', r'$m_{jj}$',[0,350,500,1000,2000,3000,4000]),
-            ),
             'muonkin': hist.Hist(
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Bin('ptmu',r'Muon $p_{T}$ [GeV]',50,0,500),
-                hist.Bin('etamu',r'Muon $\eta$',20,0,2.5),
+                hist.Bin('etamu',r'Muon $\eta$',20,0,5),
                 hist.Bin('ddb1', r'Jet ddb score', [0, 0.89, 1]),
                 hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
                 hist.Bin('mjj', r'$m_{jj}$',[0,350,500,1000,2000,3000,4000]),
@@ -112,7 +100,7 @@ class VBFmuProcessor(processor.ProcessorABC):
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
-                hist.Bin('eta1',r'Jet $eta$',20,0,2.5),                        
+                hist.Bin('eta1',r'Jet $eta$',20,0,5),
                 hist.Bin('ddb1', r'Jet ddb score', 25,0,1),
                 hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
                 hist.Bin('mjj', r'$m_{jj}$',[0,350,500,1000,2000,3000,4000]),
@@ -268,6 +256,7 @@ class VBFmuProcessor(processor.ProcessorABC):
         qgl1 = ak.firsts(jet1.qgl)
         qgl2 = ak.firsts(jet2.qgl)
 
+        selection.add('ak4jets', deta > 0)
         selection.add('deta', deta > 3.5)
         selection.add('mjj', mjj > 1000)
 
@@ -318,7 +307,6 @@ class VBFmuProcessor(processor.ProcessorABC):
         else:
             weights.add('genweight', events.genWeight)
             add_pileup_weight(weights, events.Pileup.nPU, self._year, dataset)
-            add_PS_weight(weights, events.PSWeight, self._year)
             bosons = getBosons(events.GenPart)
             matchedBoson = candidatejet.nearest(bosons, axis=None, threshold=0.8)
             if self._tightMatch:
@@ -337,10 +325,8 @@ class VBFmuProcessor(processor.ProcessorABC):
         msd_matched = candidatejet.msdcorr * self._msdSF[self._year] * (genflavor > 0) + candidatejet.msdcorr * (genflavor == 0)
 
         regions = {
-            'signal': ['trigger','lumimask','minjetkin','jetid','jetacceptance','n2ddt','antiak4btagMediumOppHem','met','noleptons'],
-            'signal-vbf': ['trigger','lumimask','minjetkin','jetid','jetacceptance','n2ddt','antiak4btagMediumOppHem','met','noleptons','deta','mjj'],
+            'signal': ['trigger','lumimask','minjetkin','jetid','jetacceptance','n2ddt','antiak4btagMediumOppHem','met','noleptons','ak4jets'],
             'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetid', 'n2ddt', 'ak4btagMedium08', 'noetau', 'onemuon', 'muonDphiAK8'],
-#            'noselection': [],
         }
 
         def normalize(val, cut):
@@ -366,14 +352,6 @@ class VBFmuProcessor(processor.ProcessorABC):
         if shift_name is None:
             systematics = [
                 None,
-                'jet_triggerUp',
-                'jet_triggerDown',
-                'btagWeightUp',
-                'btagWeightDown',
-                'btagEffStatUp',
-                'btagEffStatDown',
-                'PS_weightUp',
-                'PS_weightDown',
             ]
         else:
             systematics = [shift_name]
@@ -390,40 +368,25 @@ class VBFmuProcessor(processor.ProcessorABC):
             else:
                 weight = weights.weight()[cut] * wmod[cut]
             
-            output['templates-vbf'].fill(
+            output['muonkin'].fill(
                 dataset=dataset,
                 region=region,
-                systematic=sname,
-                pt1=normalize(candidatejet.pt, cut),
-                msd1=normalize(msd_matched, cut),
+                ptmu=normalize(leadingmuon.pt, cut),
+                etamu=normalize(abs(leadingmuon.eta),cut),
                 ddb1=normalize(candidatejet.btagDDBvL, cut),
                 deta=normalize(deta, cut),
                 mjj=normalize(mjj, cut),
                 weight=weight,
             )
-
-            if sname == 'nominal':
-                output['muonkin'].fill(
-                    dataset=dataset,
-                    region=region,
-                    ptmu=normalize(leadingmuon.pt, cut),
-                    etamu=normalize(abs(leadingmuon.eta),cut),
-                    ddb1=normalize(candidatejet.btagDDBvL, cut),
-                    deta=normalize(deta, cut),
-                    mjj=normalize(mjj, cut),
-                    weight=weight,
-                )
-                output['mujetkin'].fill(
-                    dataset=dataset,
-                    region=region,
-#                    pt1=normalize(candidatejet.pt, cut),
-                    eta1=normalize(abs(candidatejet.eta),cut),
-#                    msd1=normalize(msd_matched, cut),
-                    ddb1=normalize(candidatejet.btagDDBvL, cut),
-                    deta=normalize(deta, cut),
-                    mjj=normalize(mjj, cut),
-                    weight=weight,
-                )
+            output['mujetkin'].fill(
+                dataset=dataset,
+                region=region,
+                eta1=normalize(abs(candidatejet.eta),cut),
+                ddb1=normalize(candidatejet.btagDDBvL, cut),
+                deta=normalize(deta, cut),
+                mjj=normalize(mjj, cut),
+                weight=weight,
+            )
 
         for region in regions:
             for systematic in systematics:

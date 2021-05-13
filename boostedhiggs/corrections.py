@@ -66,7 +66,50 @@ def add_pileup_weight(weights, nPU, year='2017', dataset=None):
             compiled[f'{year}_pileupweight_puDown'](nPU),
         )
 
-def add_PS_weight(weights,ps_weights,year='2017'):
+def add_pdf_weight(weights, pdf_weights):
+
+    nom   = np.ones(len(weights.weight()))
+    up    = np.ones(len(weights.weight()))
+    down  = np.ones(len(weights.weight()))
+
+    if len(pdf_weights) > 0:
+        allweights = [pdf_weights[:,i] for i in range(0,len(pdf_weights[0]))]
+        up = np.maximum.reduce(allweights)
+        down = np.minimum.reduce(allweights)
+
+    weights.add('PDF_weight', nom, up, down)
+
+def add_scalevar_7pt(weights,var_weights):
+
+    nom   = np.ones(len(weights.weight()))
+    up    = np.ones(len(weights.weight()))
+    down  = np.ones(len(weights.weight()))
+ 
+    if len(var_weights) > 0:
+        if len(var_weights[0]) == 9: 
+            up = np.maximum.reduce([var_weights[:,1],var_weights[:,2],var_weights[:,3],var_weights[:,4],var_weights[:,6],var_weights[:,8]])
+            down = np.minimum.reduce([var_weights[:,1],var_weights[:,2],var_weights[:,3],var_weights[:,4],var_weights[:,6],var_weights[:,8]])
+        elif len(var_weights[0]) > 1:
+            print("Scale variation vector has length ", len(var_weights[0]))
+
+    weights.add('scalevar_7pt', nom, up, down)
+
+def add_scalevar_3pt(weights,var_weights):
+
+    nom   = np.ones(len(weights.weight()))
+    up    = np.ones(len(weights.weight()))
+    down  = np.ones(len(weights.weight()))
+
+    if len(var_weights) > 0:
+        if len(var_weights[0]) == 9:
+            up = np.maximum(var_weights[:,4], var_weights[:,8])
+            down = np.minimum(var_weights[:,4], var_weights[:,8])
+        elif len(var_weights[0]) > 1:
+            print("Scale variation vector has length ", len(var_weights[0]))
+
+    weights.add('scalevar_3pt', nom, up, down)
+
+def add_ps_weight(weights,ps_weights):
 
     nom  = np.ones(len(weights.weight()))
     up   = np.ones(len(weights.weight()))
@@ -79,8 +122,8 @@ def add_PS_weight(weights,ps_weights,year='2017'):
         up_fsr = ps_weights[:,1]
         down_fsr = ps_weights[:,3]
         
-        up = np.maximum(up_isr, up_fsr)
-        down = np.minimum(down_isr, down_fsr)
+        up = np.maximum.reduce([up_isr, up_fsr, down_isr, down_fsr])
+        down = np.minimum.reduce([up_isr, up_fsr, down_isr, down_fsr])
 
     elif len(ps_weights[0]) > 1:
         print("PS weight vector has length ", len(ps_weights[0]))

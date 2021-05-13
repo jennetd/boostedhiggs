@@ -16,6 +16,10 @@ from boostedhiggs.corrections import (
     corrected_msoftdrop,
     n2ddt_shift,
     powheg_to_nnlops,
+    add_ps_weight,
+    add_scalevar_7pt,
+    add_scalevar_3pt,
+    add_pdf_weight,
     add_pileup_weight,
     add_VJets_NLOkFactor,
     add_jetTriggerWeight,
@@ -38,7 +42,7 @@ def update(events, collections):
     return out
 
 
-class VBFddbProcessor(processor.ProcessorABC):
+class VBFTheoryProcessor(processor.ProcessorABC):
     def __init__(self, year='2017', jet_arbitration='pt', v2=False, v3=False, v4=False,
             nnlops_rew=False,  skipJER=False, tightMatch=False,
         ):
@@ -77,18 +81,37 @@ class VBFddbProcessor(processor.ProcessorABC):
         self._accumulator = processor.dict_accumulator({
             # dataset -> sumw
             'sumw': processor.defaultdict_accumulator(float),
-            'btagWeight': hist.Hist('Events', hist.Cat('dataset', 'Dataset'), hist.Bin('val', 'BTag correction', 50, 0, 3)),
-            'templates1': hist.Hist(
+            'cutflow': hist.Hist(
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
-#                hist.Cat('systematic', 'Systematic'),
-#                hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
-                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet 1 ddb score', 100, 0, 1),
-                hist.Bin('deta', r'$\Delta\eta_{jj}$', 14, 0, 7),
-                hist.Bin('mjj',r'$m_{jj}$ [GeV]', 8, 0, 4000)
+                hist.Bin('genflavor', 'Gen. jet flavor', [0, 1, 2, 3, 4]),
+                hist.Bin('cut', 'Cut index', 15, 0, 15),
+#                hist.Bin('msd', r'Jet $m_{sd}$', 22, 47, 201),          
             ),
+            'btagWeight': hist.Hist('Events', hist.Cat('dataset', 'Dataset'), hist.Bin('val', 'BTag correction', 50, 0, 3)),
+            'templates-vbf': hist.Hist(
+                'Events',
+                hist.Cat('dataset', 'Dataset'),
+                hist.Cat('region', 'Region'),
+                hist.Cat('systematic', 'Systematic'),
+                hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
+                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
+                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
+                hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
+                hist.Bin('mjj', r'$m_{jj}$',[0,350,500,1000,2000,3000,4000]),
+            ),
+#            'templates-vbf-2': hist.Hist(
+#                'Events',
+#                hist.Cat('dataset', 'Dataset'),
+#                hist.Cat('region', 'Region'),
+#                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
+#                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
+#                hist.Bin('qgl1', r'Jet 1 QGL', 10, 0, 1),
+#                hist.Bin('qgl2', r'Jet 2 QGL', 10, 0, 1),
+#                hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
+#                hist.Bin('mjj', r'$m_{jj}$',8,0,4000)
+#            ),
         })
 
     @property
@@ -291,6 +314,18 @@ class VBFddbProcessor(processor.ProcessorABC):
         else:
             weights.add('genweight', events.genWeight)
             add_pileup_weight(weights, events.Pileup.nPU, self._year, dataset)
+            add_ps_weight(weights, events.PSWeight)
+            if "LHEPdfWeight" in events.fields:
+                add_pdf_weight(weights,events.LHEPdfWeight)
+            else:
+                add_pdf_weight(weights,[])
+            if "LHEScaleWeight" in events.fields:
+                add_scalevar_7pt(weights, events.LHEScaleWeight)
+                add_scalevar_3pt(weights, events.LHEScaleWeight)
+            else:
+                add_scalevar_7pt(weights,[])
+                add_scalevar_3pt(weights,[])
+
             bosons = getBosons(events.GenPart)
             matchedBoson = candidatejet.nearest(bosons, axis=None, threshold=0.8)
             if self._tightMatch:
@@ -322,8 +357,28 @@ class VBFddbProcessor(processor.ProcessorABC):
                 return ar
 
         if shift_name is None:
+            for region, cuts in regions.items():
+                allcuts = set([])
+                cut = selection.all(*allcuts)
+                output['cutflow'].fill(dataset=dataset, region=region, genflavor=normalize(genflavor, None),
+                                    cut=0, weight=weights.weight())#, msd=normalize(msd_matched, None))           
+                for i, cut in enumerate(cuts + ['ddbpass']):
+                    allcuts.add(cut)
+                    cut = selection.all(*allcuts)
+                    output['cutflow'].fill(dataset=dataset, region=region, genflavor=normalize(genflavor, cut),
+                                        cut=i + 1, weight=weights.weight()[cut])#, msd=normalize(msd_matched, cut))
+
+        if shift_name is None:
             systematics = [
                 None,
+                'PS_weightUp',
+                'PS_weightDown',
+                'PDF_weightUp',
+                'PDF_weightDown',
+                'scalevar_7ptUp',
+                'scalevar_7ptDown',
+                'scalevar_3ptUp',
+                'scalevar_3ptDown',
             ]
         else:
             systematics = [shift_name]
@@ -339,28 +394,37 @@ class VBFddbProcessor(processor.ProcessorABC):
                     weight = weights.weight()[cut]
             else:
                 weight = weights.weight()[cut] * wmod[cut]
-
-            if sname == 'nominal':
-                output['templates1'].fill(
-                    dataset=dataset,
-                    region=region,
-                    msd1=normalize(msd_matched, cut),
-                    ddb1=normalize(candidatejet.btagDDBvL, cut),
-                    deta=normalize(deta, cut),
-                    mjj=normalize(mjj, cut),
-                    weight=weight,
-                )
             
+            output['templates-vbf'].fill(
+                dataset=dataset,
+                region=region,
+                systematic=sname,
+                pt1=normalize(candidatejet.pt, cut),
+                msd1=normalize(msd_matched, cut),
+                ddb1=normalize(candidatejet.btagDDBvL, cut),
+                deta=normalize(deta, cut),
+                mjj=normalize(mjj, cut),
+                weight=weight,
+            )
+
+#            if sname == 'nominal':
+#                output['templates-vbf-2'].fill(
+#                    dataset=dataset,
+#                    region=region,
+#                    ddb1=normalize(candidatejet.btagDDBvL, cut),
+#                    msd1=normalize(msd_matched, cut),
+#                    qgl1=normalize(qgl1, cut),
+#                    qgl2=normalize(qgl2, cut),
+#                    deta=normalize(deta, cut),
+#                    mjj=normalize(mjj, cut),
+#                    weight=weight,
+#                )
+
         for region in regions:
             for systematic in systematics:
                 if isRealData and systematic is not None:
                     continue
                 fill(region, systematic)
-#            if shift_name is None and 'GluGluH' in dataset and 'LHEWeight' in events.fields:
-#                for i in range(9):
-#                    fill(region, 'LHEScale_%d' % i, events.LHEScaleWeight[:, i])
-#                for c in events.LHEWeight.fields[1:]:
-#                    fill(region, 'LHEWeight_%s' % c, events.LHEWeight[c])
 
         if shift_name is None:
             output["weightStats"] = weights.weightStatistics
