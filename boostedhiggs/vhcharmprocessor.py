@@ -194,7 +194,7 @@ class VHCharmProcessor(processor.ProcessorABC):
             secondjet = ak.firsts(candidatejet[:, 1:2])
             candidatejet = ak.firsts(candidatejet)
 
-        if self._jet_arbitration == 'ddcvb':
+        elif self._jet_arbitration == 'ddcvb':
             
             leadingjets = candidatejet[:, 0:2]
             # ascending = true

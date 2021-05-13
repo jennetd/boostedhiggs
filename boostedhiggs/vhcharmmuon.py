@@ -38,8 +38,8 @@ def update(events, collections):
     return out
 
 
-class VHProcessor(processor.ProcessorABC):
-    def __init__(self, year='2017', jet_arbitration='pt', v2=False, v3=False, v4=False,
+class VHCharmMuProcessor(processor.ProcessorABC):
+    def __init__(self, year='2017', jet_arbitration='ddcvb', v2=False, v3=False, v4=False,
             nnlops_rew=False,  skipJER=False, tightMatch=False,
         ):
         # v2 DDXv2
@@ -86,27 +86,22 @@ class VHProcessor(processor.ProcessorABC):
 #                hist.Bin('msd', r'Jet $m_{sd}$', 22, 47, 201),
             ),
             'btagWeight': hist.Hist('Events', hist.Cat('dataset', 'Dataset'), hist.Bin('val', 'BTag correction', 50, 0, 3)),
-            'templates': hist.Hist(
+            'muonkin': hist.Hist(
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
-                hist.Cat('systematic', 'Systematic'),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
-                hist.Bin('pt1', r'Jet 1 $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
-                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
+                hist.Bin('ptmu',r'Muon $p_{T}$ [GeV]',50,0,500),
+                hist.Bin('etamu',r'Muon $\eta$',20,0,2.5),
+                hist.Bin('ddb1', r'Jet ddb score', [0, 0.89, 1]),
+                hist.Bin('msd2', r'Jet 2 $m_{sd}$',22, 47, 201)
             ),
-            'templates-vh-1': hist.Hist(
+            'mujetkin': hist.Hist(
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
-                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
-                hist.Bin('pt1', r'Jet 1 $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
-                hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.89, 1]),
-                hist.Bin('pt2', r'Jet 2 $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
-#                hist.Bin('DR', r'$\Delta $$',8,0,8),
+                hist.Bin('eta1',r'Jet 1 $eta$',20,0,2.5),
+                hist.Bin('ddb1', r'Jet 1 ddb score', 25,0,1),
+                hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201)
             ),
         })
 
@@ -366,12 +361,6 @@ class VHProcessor(processor.ProcessorABC):
         if shift_name is None:
             systematics = [
                 None,
-                'jet_triggerUp',
-                'jet_triggerDown',
-                'btagWeightUp',
-                'btagWeightDown',
-                'btagEffStatUp',
-                'btagEffStatDown',
             ]
         else:
             systematics = [shift_name]
@@ -388,31 +377,24 @@ class VHProcessor(processor.ProcessorABC):
             else:
                 weight = weights.weight()[cut] * wmod[cut]
             
-            output['templates'].fill(
+            output['muonkin'].fill(
                 dataset=dataset,
                 region=region,
-                systematic=sname,
-                pt1=normalize(candidatejet.pt, cut),
-                msd1=normalize(msd_matched, cut),
-                msd2=normalize(msd2_matched, cut),
+                ptmu=normalize(leadingmuon.pt, cut),
+                etamu=normalize(abs(leadingmuon.eta),cut),
                 ddb1=normalize(candidatejet.btagDDBvL, cut),
+                msd2=normalize(msd2_matched, cut),
                 weight=weight,
             )
-
-            if sname == "nominal":
-                output['templates-vh-1'].fill(
-                    dataset=dataset,
-                    region=region,
-                    msd1=normalize(msd_matched, cut),
-                    ddb1=normalize(candidatejet.btagDDBvL, cut),
-                    pt1=normalize(candidatejet.pt, cut),
-                    msd2=normalize(msd2_matched, cut),
-                    ddb2=normalize(secondjet.btagDDBvL, cut),
-                    pt2=normalize(secondjet.pt, cut),
-#                    DR=normalize(DR, cut),
-                    weight=weight,
-                )
-
+            output['mujetkin'].fill(
+                dataset=dataset,
+                region=region,
+                eta1=normalize(abs(candidatejet.eta),cut),
+                ddb1=normalize(candidatejet.btagDDBvL, cut),
+                msd2=normalize(msd2_matched, cut),
+                weight=weight,
+            )
+            
             if not isRealData:
                 if wmod is not None:
                     _custom_weight = events.genWeight[cut] * wmod[cut]
