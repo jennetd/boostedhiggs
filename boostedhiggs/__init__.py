@@ -11,7 +11,7 @@ __all__ = [
     'HbbProcessor',
     'VBFProcessor',
     'VBFmuProcessor',
-    'VBFtheoryProcessor',
+    'VBFTheoryProcessor',
     'VBFddbProcessor',
     'BTagEfficiency',
 ]

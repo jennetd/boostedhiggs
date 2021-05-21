@@ -18,7 +18,9 @@ from boostedhiggs.corrections import (
     powheg_to_nnlops,
     add_pileup_weight,
     add_VJets_NLOkFactor,
+    add_VJets_kFactors,
     add_jetTriggerWeight,
+    add_jetTriggerSF,
     jet_factory,
     fatjet_factory,
     add_jec_variables,
@@ -39,21 +41,18 @@ def update(events, collections):
 
 
 class VBFmuProcessor(processor.ProcessorABC):
-    def __init__(self, year='2017', jet_arbitration='pt', v2=False, v3=False, v4=False,
-            nnlops_rew=False,  skipJER=False, tightMatch=False,
+    def __init__(self, year='2017', jet_arbitration='pt', btagV2=False,
+                 nnlops_rew=False, skipJER=False, tightMatch=False, newVjetsKfactor=True,
         ):
-        # v2 DDXv2
-        # v3 ParticleNet
-        # v4 mix
+
         self._year = year
-        self._v2 = v2
-        self._v3 = v3
-        self._v4 = v4
         self._nnlops_rew = nnlops_rew # for 2018, reweight POWHEG to NNLOPS
         self._jet_arbitration = jet_arbitration
         self._skipJER = skipJER
         self._tightMatch = tightMatch
+        self._newVjetsKfactor= newVjetsKfactor
 
+        self._btagV2 = btagV2
         self._btagSF = BTagCorrector(year, 'medium')
 
         self._msdSF = {
@@ -156,12 +155,16 @@ class VBFmuProcessor(processor.ProcessorABC):
             for t in self._triggers[self._year]:
                 if t in events.HLT.fields:
                     trigger = trigger | events.HLT[t]
-            # print(f"Lumipass: {np.sum(lumi_mask)}/{len(lumi_mask)}")
+
+            selection.add('trigger', trigger)
+            del trigger
         else:
-            trigger = np.ones(len(events), dtype='bool')
-            lumi_mask  = np.ones(len(events), dtype='bool')
-        selection.add('trigger', trigger)
-        selection.add('lumimask', lumi_mask)
+            selection.add('trigger', np.ones(len(events), dtype='bool'))
+
+        if isRealData:
+            selection.add('lumimask', lumiMasks[self._year](events.run, events.luminosityBlock))
+        else:
+            selection.add('lumimask', np.ones(len(events), dtype='bool'))
 
         if isRealData:
             trigger = np.zeros(len(events), dtype='bool')
@@ -169,13 +172,9 @@ class VBFmuProcessor(processor.ProcessorABC):
             for t in self._muontriggers[self._year]:
                 if t in events.HLT.fields:
                     trigger = trigger | events.HLT[t]
-            # print(f"Lumipass: {np.sum(lumi_mask)}/{len(lumi_mask)}")
+            selection.add('muontrigger', trigger)
         else:
-            trigger = np.ones(len(events), dtype='bool')
-            lumi_mask  = np.ones(len(events), dtype='bool')
-        selection.add('muontrigger', trigger)
-        selection.add('lumimask', lumi_mask)
-
+            selection.add('muontrigger', np.ones(len(events), dtype='bool'))
         
         fatjets = events.FatJet
         fatjets['msdcorr'] = corrected_msoftdrop(fatjets)
@@ -189,6 +188,11 @@ class VBFmuProcessor(processor.ProcessorABC):
             & (abs(fatjets.eta) < 2.5)
             & fatjets.isTight  # this is loose in sampleContainer
         ]
+
+        ddb = candidatejet.btagDDBvL
+        if self._btagV2:
+            ddb = candidatejet.btagDDBvLV2
+
         if self._jet_arbitration == 'pt':
             candidatejet = ak.firsts(candidatejet)
         elif self._jet_arbitration == 'mass':
@@ -201,10 +205,14 @@ class VBFmuProcessor(processor.ProcessorABC):
             ]
         elif self._jet_arbitration == 'ddb':
             candidatejet = candidatejet[
-                ak.argmax(candidatejet.btagDDBvL)
+                ak.argmax(ddb)
             ]
         else:
             raise RuntimeError("Unknown candidate jet arbitration")
+
+        ddb = candidatejet.btagDDBvL
+        if self._btagV2:
+            ddb = candidatejet.btagDDBvLV2
 
         selection.add('minjetkin',
             (candidatejet.pt >= 450)
@@ -223,7 +231,7 @@ class VBFmuProcessor(processor.ProcessorABC):
         )
         selection.add('jetid', candidatejet.isTight)
         selection.add('n2ddt', (candidatejet.n2ddt < 0.))
-        selection.add('ddbpass', (candidatejet.btagDDBvL >= 0.89))
+        selection.add('ddbpass', (ddb >= 0.89))
 
         jets = events.Jet
         jets = jets[
@@ -316,8 +324,13 @@ class VBFmuProcessor(processor.ProcessorABC):
             else:
                 genflavor = bosonFlavor(matchedBoson)
             genBosonPt = ak.fill_none(ak.firsts(bosons.pt), 0)
-            add_VJets_NLOkFactor(weights, genBosonPt, self._year, dataset)
-            add_jetTriggerWeight(weights, candidatejet.msdcorr, candidatejet.pt, self._year)
+
+            if self._newVjetsKfactor:
+                add_VJets_kFactors(weights, events.GenPart, dataset)
+            else:
+                add_VJets_NLOkFactor(weights, genBosonPt, self._year, dataset)
+            add_jetTriggerSF(weights, ak.firsts(fatjets), self._year)
+
             if shift_name is None:
                 output['btagWeight'].fill(dataset=dataset, val=self._btagSF.addBtagWeight(weights, ak4_away))
             logger.debug("Weight statistics: %r" % weights.weightStatistics)
@@ -350,9 +363,7 @@ class VBFmuProcessor(processor.ProcessorABC):
                                         cut=i + 1, weight=weights.weight()[cut])#, msd=normalize(msd_matched, cut))
 
         if shift_name is None:
-            systematics = [
-                None,
-            ]
+            systematics = [None] + list(weights.variations)
         else:
             systematics = [shift_name]
 
@@ -368,25 +379,26 @@ class VBFmuProcessor(processor.ProcessorABC):
             else:
                 weight = weights.weight()[cut] * wmod[cut]
             
-            output['muonkin'].fill(
-                dataset=dataset,
-                region=region,
-                ptmu=normalize(leadingmuon.pt, cut),
-                etamu=normalize(abs(leadingmuon.eta),cut),
-                ddb1=normalize(candidatejet.btagDDBvL, cut),
-                deta=normalize(deta, cut),
-                mjj=normalize(mjj, cut),
-                weight=weight,
-            )
-            output['mujetkin'].fill(
-                dataset=dataset,
-                region=region,
-                eta1=normalize(abs(candidatejet.eta),cut),
-                ddb1=normalize(candidatejet.btagDDBvL, cut),
-                deta=normalize(deta, cut),
-                mjj=normalize(mjj, cut),
-                weight=weight,
-            )
+            if sname == 'nominal':
+                output['muonkin'].fill(
+                    dataset=dataset,
+                    region=region,
+                    ptmu=normalize(leadingmuon.pt, cut),
+                    etamu=normalize(abs(leadingmuon.eta),cut),
+                    ddb1=normalize(candidatejet.btagDDBvL, cut),
+                    deta=normalize(deta, cut),
+                    mjj=normalize(mjj, cut),
+                    weight=weight,
+                )
+                output['mujetkin'].fill(
+                    dataset=dataset,
+                    region=region,
+                    eta1=normalize(abs(candidatejet.eta),cut),
+                    ddb1=normalize(candidatejet.btagDDBvL, cut),
+                    deta=normalize(deta, cut),
+                    mjj=normalize(mjj, cut),
+                    weight=weight,
+                )
 
         for region in regions:
             for systematic in systematics:

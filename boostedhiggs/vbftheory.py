@@ -22,7 +22,9 @@ from boostedhiggs.corrections import (
     add_pdf_weight,
     add_pileup_weight,
     add_VJets_NLOkFactor,
+    add_VJets_kFactors,
     add_jetTriggerWeight,
+    add_jetTriggerSF,
     jet_factory,
     fatjet_factory,
     add_jec_variables,
@@ -43,21 +45,18 @@ def update(events, collections):
 
 
 class VBFTheoryProcessor(processor.ProcessorABC):
-    def __init__(self, year='2017', jet_arbitration='pt', v2=False, v3=False, v4=False,
-            nnlops_rew=False,  skipJER=False, tightMatch=False,
+    def __init__(self, year='2017', jet_arbitration='pt', btagV2=False,
+                 nnlops_rew=False, skipJER=False, tightMatch=False, newVjetsKfactor=True,
         ):
-        # v2 DDXv2
-        # v3 ParticleNet
-        # v4 mix
+
         self._year = year
-        self._v2 = v2
-        self._v3 = v3
-        self._v4 = v4
         self._nnlops_rew = nnlops_rew # for 2018, reweight POWHEG to NNLOPS
         self._jet_arbitration = jet_arbitration
         self._skipJER = skipJER
         self._tightMatch = tightMatch
+        self._newVjetsKfactor= newVjetsKfactor
 
+        self._btagV2 = btagV2
         self._btagSF = BTagCorrector(year, 'medium')
 
         self._msdSF = {
@@ -101,17 +100,6 @@ class VBFTheoryProcessor(processor.ProcessorABC):
                 hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
                 hist.Bin('mjj', r'$m_{jj}$',[0,350,500,1000,2000,3000,4000]),
             ),
-#            'templates-vbf-2': hist.Hist(
-#                'Events',
-#                hist.Cat('dataset', 'Dataset'),
-#                hist.Cat('region', 'Region'),
-#                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
-#                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-#                hist.Bin('qgl1', r'Jet 1 QGL', 10, 0, 1),
-#                hist.Bin('qgl2', r'Jet 2 QGL', 10, 0, 1),
-#                hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
-#                hist.Bin('mjj', r'$m_{jj}$',8,0,4000)
-#            ),
         })
 
     @property
@@ -163,12 +151,16 @@ class VBFTheoryProcessor(processor.ProcessorABC):
             for t in self._triggers[self._year]:
                 if t in events.HLT.fields:
                     trigger = trigger | events.HLT[t]
-            # print(f"Lumipass: {np.sum(lumi_mask)}/{len(lumi_mask)}")
+
+            selection.add('trigger', trigger)
+            del trigger
         else:
-            trigger = np.ones(len(events), dtype='bool')
-            lumi_mask  = np.ones(len(events), dtype='bool')
-        selection.add('trigger', trigger)
-        selection.add('lumimask', lumi_mask)
+            selection.add('trigger', np.ones(len(events), dtype='bool'))
+
+        if isRealData:
+            selection.add('lumimask', lumiMasks[self._year](events.run, events.luminosityBlock))
+        else:
+            selection.add('lumimask', np.ones(len(events), dtype='bool'))
 
         if isRealData:
             trigger = np.zeros(len(events), dtype='bool')
@@ -176,13 +168,9 @@ class VBFTheoryProcessor(processor.ProcessorABC):
             for t in self._muontriggers[self._year]:
                 if t in events.HLT.fields:
                     trigger = trigger | events.HLT[t]
-            # print(f"Lumipass: {np.sum(lumi_mask)}/{len(lumi_mask)}")
+            selection.add('muontrigger', trigger)
         else:
-            trigger = np.ones(len(events), dtype='bool')
-            lumi_mask  = np.ones(len(events), dtype='bool')
-        selection.add('muontrigger', trigger)
-        selection.add('lumimask', lumi_mask)
-
+            selection.add('muontrigger', np.ones(len(events), dtype='bool'))
         
         fatjets = events.FatJet
         fatjets['msdcorr'] = corrected_msoftdrop(fatjets)
@@ -196,6 +184,11 @@ class VBFTheoryProcessor(processor.ProcessorABC):
             & (abs(fatjets.eta) < 2.5)
             & fatjets.isTight  # this is loose in sampleContainer
         ]
+
+        ddb = candidatejet.btagDDBvL
+        if self._btagV2:
+            ddb = candidatejet.btagDDBvLV2
+
         if self._jet_arbitration == 'pt':
             candidatejet = ak.firsts(candidatejet)
         elif self._jet_arbitration == 'mass':
@@ -208,10 +201,14 @@ class VBFTheoryProcessor(processor.ProcessorABC):
             ]
         elif self._jet_arbitration == 'ddb':
             candidatejet = candidatejet[
-                ak.argmax(candidatejet.btagDDBvL)
+                ak.argmax(ddb)
             ]
         else:
             raise RuntimeError("Unknown candidate jet arbitration")
+
+        ddb = candidatejet.btagDDBvL
+        if self._btagV2:
+            ddb = candidatejet.btagDDBvLV2
 
         selection.add('minjetkin',
             (candidatejet.pt >= 450)
@@ -230,7 +227,7 @@ class VBFTheoryProcessor(processor.ProcessorABC):
         )
         selection.add('jetid', candidatejet.isTight)
         selection.add('n2ddt', (candidatejet.n2ddt < 0.))
-        selection.add('ddbpass', (candidatejet.btagDDBvL >= 0.89))
+        selection.add('ddbpass', (ddb >= 0.89))
 
         jets = events.Jet
         jets = jets[
@@ -313,7 +310,6 @@ class VBFTheoryProcessor(processor.ProcessorABC):
             genflavor = candidatejet.pt - candidatejet.pt  # zeros_like
         else:
             weights.add('genweight', events.genWeight)
-            add_pileup_weight(weights, events.Pileup.nPU, self._year, dataset)
             add_ps_weight(weights, events.PSWeight)
             if "LHEPdfWeight" in events.fields:
                 add_pdf_weight(weights,events.LHEPdfWeight)
@@ -325,7 +321,7 @@ class VBFTheoryProcessor(processor.ProcessorABC):
             else:
                 add_scalevar_7pt(weights,[])
                 add_scalevar_3pt(weights,[])
-
+            add_pileup_weight(weights, events.Pileup.nPU, self._year, dataset)
             bosons = getBosons(events.GenPart)
             matchedBoson = candidatejet.nearest(bosons, axis=None, threshold=0.8)
             if self._tightMatch:
@@ -335,8 +331,13 @@ class VBFTheoryProcessor(processor.ProcessorABC):
             else:
                 genflavor = bosonFlavor(matchedBoson)
             genBosonPt = ak.fill_none(ak.firsts(bosons.pt), 0)
-            add_VJets_NLOkFactor(weights, genBosonPt, self._year, dataset)
-            add_jetTriggerWeight(weights, candidatejet.msdcorr, candidatejet.pt, self._year)
+
+            if self._newVjetsKfactor:
+                add_VJets_kFactors(weights, events.GenPart, dataset)
+            else:
+                add_VJets_NLOkFactor(weights, genBosonPt, self._year, dataset)
+            add_jetTriggerSF(weights, ak.firsts(fatjets), self._year)
+
             if shift_name is None:
                 output['btagWeight'].fill(dataset=dataset, val=self._btagSF.addBtagWeight(weights, ak4_away))
             logger.debug("Weight statistics: %r" % weights.weightStatistics)
@@ -369,17 +370,7 @@ class VBFTheoryProcessor(processor.ProcessorABC):
                                         cut=i + 1, weight=weights.weight()[cut])#, msd=normalize(msd_matched, cut))
 
         if shift_name is None:
-            systematics = [
-                None,
-                'PS_weightUp',
-                'PS_weightDown',
-                'PDF_weightUp',
-                'PDF_weightDown',
-                'scalevar_7ptUp',
-                'scalevar_7ptDown',
-                'scalevar_3ptUp',
-                'scalevar_3ptDown',
-            ]
+            systematics = [None] + list(weights.variations)
         else:
             systematics = [shift_name]
 
@@ -406,25 +397,17 @@ class VBFTheoryProcessor(processor.ProcessorABC):
                 mjj=normalize(mjj, cut),
                 weight=weight,
             )
-
-#            if sname == 'nominal':
-#                output['templates-vbf-2'].fill(
-#                    dataset=dataset,
-#                    region=region,
-#                    ddb1=normalize(candidatejet.btagDDBvL, cut),
-#                    msd1=normalize(msd_matched, cut),
-#                    qgl1=normalize(qgl1, cut),
-#                    qgl2=normalize(qgl2, cut),
-#                    deta=normalize(deta, cut),
-#                    mjj=normalize(mjj, cut),
-#                    weight=weight,
-#                )
-
+            
         for region in regions:
             for systematic in systematics:
                 if isRealData and systematic is not None:
                     continue
                 fill(region, systematic)
+#            if shift_name is None and 'GluGluH' in dataset and 'LHEWeight' in events.fields:
+#                for i in range(9):
+#                    fill(region, 'LHEScale_%d' % i, events.LHEScaleWeight[:, i])
+#                for c in events.LHEWeight.fields[1:]:
+#                    fill(region, 'LHEWeight_%s' % c, events.LHEWeight[c])
 
         if shift_name is None:
             output["weightStats"] = weights.weightStatistics
