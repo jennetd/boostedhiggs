@@ -91,7 +91,7 @@ class VBFmuProcessor(processor.ProcessorABC):
                 hist.Cat('region', 'Region'),
                 hist.Bin('ptmu',r'Muon $p_{T}$ [GeV]',50,0,500),
                 hist.Bin('etamu',r'Muon $\eta$',20,0,5),
-                hist.Bin('ddb1', r'Jet ddb score', [0, 0.89, 1]),
+                hist.Bin('ddb1', r'Jet ddb score', [0, 0.7, 0.89, 1]),
                 hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
                 hist.Bin('mjj', r'$m_{jj}$',[0,350,500,1000,2000,3000,4000]),
             ),

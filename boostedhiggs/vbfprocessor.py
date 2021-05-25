@@ -92,7 +92,7 @@ class VBFProcessor(processor.ProcessorABC):
                 hist.Cat('systematic', 'Systematic'),
                 hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
                 hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
+                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.7, 0.89, 1]),
                 hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
                 hist.Bin('mjj', r'$m_{jj}$',[0,350,500,1000,2000,3000,4000]),
             ),
