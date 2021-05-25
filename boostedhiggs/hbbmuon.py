@@ -91,7 +91,7 @@ class HbbMuProcessor(processor.ProcessorABC):
                 hist.Cat('region', 'Region'),
                 hist.Bin('ptmu',r'Muon $p_{T}$ [GeV]',50,0,500),
                 hist.Bin('etamu',r'Muon $\eta$',20,0,5),
-                hist.Bin('ddb1', r'Jet ddb score', [0, 0.89, 1]),
+                hist.Bin('ddb1', r'Jet ddb score', [0, 0.7, 0.89, 1]),
             ),
             'mujetkin': hist.Hist(
                 'Events',
