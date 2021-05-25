@@ -365,14 +365,14 @@ class HbbMuProcessor(processor.ProcessorABC):
                     region=region,
                     ptmu=normalize(leadingmuon.pt, cut),
                     etamu=normalize(abs(leadingmuon.eta),cut),
-                    ddb1=normalize(candidatejet.btagDDBvL, cut),
+                    ddb1=normalize(ddb, cut),
                     weight=weight,
                 )
                 output['mujetkin'].fill(
                     dataset=dataset,
                     region=region,
                     eta1=normalize(abs(candidatejet.eta),cut),
-                    ddb1=normalize(candidatejet.btagDDBvL, cut),
+                    ddb1=normalize(ddb, cut),
                     weight=weight,
                 )
 
