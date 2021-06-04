@@ -327,7 +327,7 @@ class HbbProcessor(processor.ProcessorABC):
         msd_matched = candidatejet.msdcorr * self._msdSF[self._year] * (genflavor > 0) + candidatejet.msdcorr * (genflavor == 0)
 
         regions = {
-            'signal': ['trigger','lumimask','minjetkin','jetid','jetacceptance','n2ddt','antiak4btagMediumOppHem','met','noleptons','ak4jets'],
+            'signal': ['trigger','lumimask','minjetkin','jetid','jetacceptance','n2ddt','antiak4btagMediumOppHem','met','noleptons'],
             'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetid', 'n2ddt', 'ak4btagMedium08', 'noetau', 'onemuon', 'muonDphiAK8'],
         }
 
