@@ -90,8 +90,8 @@ class VHProcessor(processor.ProcessorABC):
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Cat('systematic', 'Systematic'),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
-                hist.Bin('pt1', r'Jet 1 $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
+                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.7, 0.89, 1]),
+                hist.Bin('pt1', r'Jet 1 $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
                 hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
                 hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
             ),
@@ -100,13 +100,23 @@ class VHProcessor(processor.ProcessorABC):
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
+                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.7, 0.89, 1]),
                 hist.Bin('pt1', r'Jet 1 $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
                 hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.89, 1]),
+                hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.7, 0.89, 1]),
                 hist.Bin('pt2', r'Jet 2 $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
-#                hist.Bin('DR', r'$\Delta $$',8,0,8),                                                                                     
             ),
+            'templates-vh-2': hist.Hist(
+                'Events',
+                hist.Cat('dataset', 'Dataset'),
+                hist.Cat('region', 'Region'),
+                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
+                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.7, 0.89, 1]),
+                hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
+                hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.7, 0.89, 1]),
+                hist.Bin('ddc2', r'Jet 2 ddc score', 5, 0, 1),
+            ),
+
         })
 
     @property
@@ -408,6 +418,18 @@ class VHProcessor(processor.ProcessorABC):
                     pt2=normalize(secondjet.pt, cut),
                     weight=weight,
                 )
+
+                output['templates-vh-2'].fill(
+                    dataset=dataset,
+                    region=region,
+                    msd1=normalize(msd_matched, cut),
+                    ddb1=normalize(ddb, cut),
+                    msd2=normalize(msd2_matched, cut),
+                    ddb2=normalize(ddb2, cut),
+                    ddc2=normalize(secondjet.btagDDCvL, cut),
+                    weight=weight,
+                )
+
 
         for region in regions:
             for systematic in systematics:
