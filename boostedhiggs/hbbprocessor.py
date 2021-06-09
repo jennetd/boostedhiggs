@@ -89,7 +89,7 @@ class HbbProcessor(processor.ProcessorABC):
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Cat('systematic', 'Systematic'),
-                hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
+                hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
                 hist.Bin('msd1', r'Jet $m_{sd}$', 22, 47, 201),
                 hist.Bin('ddb1', r'Jet ddb score', [0, 0.7, 0.89, 1]),
             ),
@@ -250,12 +250,13 @@ class HbbProcessor(processor.ProcessorABC):
 
         deta = abs(ak.firsts(jet1).eta - ak.firsts(jet2).eta)
         mjj = ( ak.firsts(jet1) + ak.firsts(jet2) ).mass
-        qgl1 = ak.firsts(jet1.qgl)
-        qgl2 = ak.firsts(jet2.qgl)
 
-        selection.add('ak4jets', deta > 0)
-        selection.add('deta', deta > 3.5)
-        selection.add('mjj', mjj > 1000)
+        isvbf = ((deta > 3.5) & (mjj > 1000))
+
+        selection.add('isvbf', isvbf)
+
+        isnotvbf = ak.fill_none(~isvbf,True)
+        selection.add('notvbf', isnotvbf)
 
         goodelectron = (
             (events.Electron.pt > 10)
@@ -327,7 +328,8 @@ class HbbProcessor(processor.ProcessorABC):
         msd_matched = candidatejet.msdcorr * self._msdSF[self._year] * (genflavor > 0) + candidatejet.msdcorr * (genflavor == 0)
 
         regions = {
-            'signal': ['trigger','lumimask','minjetkin','jetid','jetacceptance','n2ddt','antiak4btagMediumOppHem','met','noleptons','ak4jets'],
+            'signal-ggf': ['trigger','lumimask','minjetkin','jetid','jetacceptance','n2ddt','antiak4btagMediumOppHem','met','noleptons','notvbf'],
+            'signal-vbf': ['trigger','lumimask','minjetkin','jetid','jetacceptance','n2ddt','antiak4btagMediumOppHem','met','noleptons','isvbf'],
             'muoncontrol': ['muontrigger', 'minjetkin_muoncr', 'jetid', 'n2ddt', 'ak4btagMedium08', 'noetau', 'onemuon', 'muonDphiAK8'],
         }
 

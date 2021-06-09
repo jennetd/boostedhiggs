@@ -18,7 +18,9 @@ from boostedhiggs.corrections import (
     powheg_to_nnlops,
     add_pileup_weight,
     add_VJets_NLOkFactor,
+    add_VJets_kFactors,
     add_jetTriggerWeight,
+    add_jetTriggerSF,
     jet_factory,
     fatjet_factory,
     add_jec_variables,
@@ -39,21 +41,18 @@ def update(events, collections):
 
 
 class VBFddbProcessor(processor.ProcessorABC):
-    def __init__(self, year='2017', jet_arbitration='pt', v2=False, v3=False, v4=False,
-            nnlops_rew=False,  skipJER=False, tightMatch=False,
+    def __init__(self, year='2017', jet_arbitration='pt', btagV2=False,
+                 nnlops_rew=False, skipJER=False, tightMatch=False, newVjetsKfactor=True,
         ):
-        # v2 DDXv2
-        # v3 ParticleNet
-        # v4 mix
+
         self._year = year
-        self._v2 = v2
-        self._v3 = v3
-        self._v4 = v4
         self._nnlops_rew = nnlops_rew # for 2018, reweight POWHEG to NNLOPS
         self._jet_arbitration = jet_arbitration
         self._skipJER = skipJER
         self._tightMatch = tightMatch
+        self._newVjetsKfactor= newVjetsKfactor
 
+        self._btagV2 = btagV2
         self._btagSF = BTagCorrector(year, 'medium')
 
         self._msdSF = {
@@ -77,17 +76,25 @@ class VBFddbProcessor(processor.ProcessorABC):
         self._accumulator = processor.dict_accumulator({
             # dataset -> sumw
             'sumw': processor.defaultdict_accumulator(float),
-            'btagWeight': hist.Hist('Events', hist.Cat('dataset', 'Dataset'), hist.Bin('val', 'BTag correction', 50, 0, 3)),
-            'templates1': hist.Hist(
+            'cutflow': hist.Hist(
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
-#                hist.Cat('systematic', 'Systematic'),
+                hist.Bin('genflavor', 'Gen. jet flavor', [0, 1, 2, 3, 4]),
+                hist.Bin('cut', 'Cut index', 15, 0, 15),
+#                hist.Bin('msd', r'Jet $m_{sd}$', 22, 47, 201),          
+            ),
+            'btagWeight': hist.Hist('Events', hist.Cat('dataset', 'Dataset'), hist.Bin('val', 'BTag correction', 50, 0, 3)),
+            'templates-vbf': hist.Hist(
+                'Events',
+                hist.Cat('dataset', 'Dataset'),
+                hist.Cat('region', 'Region'),
+                hist.Cat('systematic', 'Systematic'),
 #                hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [450, 500, 550, 600, 675, 800, 1200]),
                 hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet 1 ddb score', 100, 0, 1),
-                hist.Bin('deta', r'$\Delta\eta_{jj}$', 14, 0, 7),
-                hist.Bin('mjj',r'$m_{jj}$ [GeV]', 8, 0, 4000)
+                hist.Bin('ddb1', r'Jet 1 ddb score', 100,0,1),
+                hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
+                hist.Bin('mjj', r'$m_{jj}$',[0,350,500,1000,2000,3000,4000]),
             ),
         })
 
@@ -140,12 +147,16 @@ class VBFddbProcessor(processor.ProcessorABC):
             for t in self._triggers[self._year]:
                 if t in events.HLT.fields:
                     trigger = trigger | events.HLT[t]
-            # print(f"Lumipass: {np.sum(lumi_mask)}/{len(lumi_mask)}")
+
+            selection.add('trigger', trigger)
+            del trigger
         else:
-            trigger = np.ones(len(events), dtype='bool')
-            lumi_mask  = np.ones(len(events), dtype='bool')
-        selection.add('trigger', trigger)
-        selection.add('lumimask', lumi_mask)
+            selection.add('trigger', np.ones(len(events), dtype='bool'))
+
+        if isRealData:
+            selection.add('lumimask', lumiMasks[self._year](events.run, events.luminosityBlock))
+        else:
+            selection.add('lumimask', np.ones(len(events), dtype='bool'))
 
         if isRealData:
             trigger = np.zeros(len(events), dtype='bool')
@@ -153,13 +164,9 @@ class VBFddbProcessor(processor.ProcessorABC):
             for t in self._muontriggers[self._year]:
                 if t in events.HLT.fields:
                     trigger = trigger | events.HLT[t]
-            # print(f"Lumipass: {np.sum(lumi_mask)}/{len(lumi_mask)}")
+            selection.add('muontrigger', trigger)
         else:
-            trigger = np.ones(len(events), dtype='bool')
-            lumi_mask  = np.ones(len(events), dtype='bool')
-        selection.add('muontrigger', trigger)
-        selection.add('lumimask', lumi_mask)
-
+            selection.add('muontrigger', np.ones(len(events), dtype='bool'))
         
         fatjets = events.FatJet
         fatjets['msdcorr'] = corrected_msoftdrop(fatjets)
@@ -173,6 +180,11 @@ class VBFddbProcessor(processor.ProcessorABC):
             & (abs(fatjets.eta) < 2.5)
             & fatjets.isTight  # this is loose in sampleContainer
         ]
+
+        ddb = candidatejet.btagDDBvL
+        if self._btagV2:
+            ddb = candidatejet.btagDDBvLV2
+
         if self._jet_arbitration == 'pt':
             candidatejet = ak.firsts(candidatejet)
         elif self._jet_arbitration == 'mass':
@@ -185,10 +197,14 @@ class VBFddbProcessor(processor.ProcessorABC):
             ]
         elif self._jet_arbitration == 'ddb':
             candidatejet = candidatejet[
-                ak.argmax(candidatejet.btagDDBvL)
+                ak.argmax(ddb)
             ]
         else:
             raise RuntimeError("Unknown candidate jet arbitration")
+
+        ddb = candidatejet.btagDDBvL
+        if self._btagV2:
+            ddb = candidatejet.btagDDBvLV2
 
         selection.add('minjetkin',
             (candidatejet.pt >= 450)
@@ -207,7 +223,7 @@ class VBFddbProcessor(processor.ProcessorABC):
         )
         selection.add('jetid', candidatejet.isTight)
         selection.add('n2ddt', (candidatejet.n2ddt < 0.))
-        selection.add('ddbpass', (candidatejet.btagDDBvL >= 0.89))
+        selection.add('ddbpass', (ddb >= 0.89))
 
         jets = events.Jet
         jets = jets[
@@ -300,8 +316,13 @@ class VBFddbProcessor(processor.ProcessorABC):
             else:
                 genflavor = bosonFlavor(matchedBoson)
             genBosonPt = ak.fill_none(ak.firsts(bosons.pt), 0)
-            add_VJets_NLOkFactor(weights, genBosonPt, self._year, dataset)
-            add_jetTriggerWeight(weights, candidatejet.msdcorr, candidatejet.pt, self._year)
+
+            if self._newVjetsKfactor:
+                add_VJets_kFactors(weights, events.GenPart, dataset)
+            else:
+                add_VJets_NLOkFactor(weights, genBosonPt, self._year, dataset)
+            add_jetTriggerSF(weights, ak.firsts(fatjets), self._year)
+
             if shift_name is None:
                 output['btagWeight'].fill(dataset=dataset, val=self._btagSF.addBtagWeight(weights, ak4_away))
             logger.debug("Weight statistics: %r" % weights.weightStatistics)
@@ -322,9 +343,19 @@ class VBFddbProcessor(processor.ProcessorABC):
                 return ar
 
         if shift_name is None:
-            systematics = [
-                None,
-            ]
+            for region, cuts in regions.items():
+                allcuts = set([])
+                cut = selection.all(*allcuts)
+                output['cutflow'].fill(dataset=dataset, region=region, genflavor=normalize(genflavor, None),
+                                    cut=0, weight=weights.weight())#, msd=normalize(msd_matched, None))           
+                for i, cut in enumerate(cuts + ['ddbpass']):
+                    allcuts.add(cut)
+                    cut = selection.all(*allcuts)
+                    output['cutflow'].fill(dataset=dataset, region=region, genflavor=normalize(genflavor, cut),
+                                        cut=i + 1, weight=weights.weight()[cut])#, msd=normalize(msd_matched, cut))
+
+        if shift_name is None:
+            systematics = [None] + list(weights.variations)
         else:
             systematics = [shift_name]
 
@@ -339,18 +370,19 @@ class VBFddbProcessor(processor.ProcessorABC):
                     weight = weights.weight()[cut]
             else:
                 weight = weights.weight()[cut] * wmod[cut]
-
-            if sname == 'nominal':
-                output['templates1'].fill(
-                    dataset=dataset,
-                    region=region,
-                    msd1=normalize(msd_matched, cut),
-                    ddb1=normalize(candidatejet.btagDDBvL, cut),
-                    deta=normalize(deta, cut),
-                    mjj=normalize(mjj, cut),
-                    weight=weight,
-                )
             
+            output['templates-vbf'].fill(
+                dataset=dataset,
+                region=region,
+                systematic=sname,
+#                pt1=normalize(candidatejet.pt, cut),
+                msd1=normalize(msd_matched, cut),
+                ddb1=normalize(ddb, cut),
+                deta=normalize(deta, cut),
+                mjj=normalize(mjj, cut),
+                weight=weight,
+            )
+
         for region in regions:
             for systematic in systematics:
                 if isRealData and systematic is not None:
