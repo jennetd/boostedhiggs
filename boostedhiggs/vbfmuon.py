@@ -82,7 +82,6 @@ class VBFmuProcessor(processor.ProcessorABC):
                 hist.Cat('region', 'Region'),
                 hist.Bin('genflavor', 'Gen. jet flavor', [0, 1, 2, 3, 4]),
                 hist.Bin('cut', 'Cut index', 15, 0, 15),
-#                hist.Bin('msd', r'Jet $m_{sd}$', 22, 47, 201),          
             ),
             'btagWeight': hist.Hist('Events', hist.Cat('dataset', 'Dataset'), hist.Bin('val', 'BTag correction', 50, 0, 3)),
             'muonkin': hist.Hist(
@@ -91,7 +90,7 @@ class VBFmuProcessor(processor.ProcessorABC):
                 hist.Cat('region', 'Region'),
                 hist.Bin('ptmu',r'Muon $p_{T}$ [GeV]',50,0,500),
                 hist.Bin('etamu',r'Muon $\eta$',20,0,5),
-                hist.Bin('ddb1', r'Jet ddb score', [0, 0.7, 0.89, 1]),
+                hist.Bin('ddb1', r'Jet ddb score', [0, 0.64, 0.89, 1]),
                 hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
                 hist.Bin('mjj', r'$m_{jj}$',[0,350,500,1000,2000,3000,4000]),
             ),
@@ -216,7 +215,7 @@ class VBFmuProcessor(processor.ProcessorABC):
 
         selection.add('minjetkin',
             (candidatejet.pt >= 450)
-            & (candidatejet.msdcorr >= 47.)
+            & (candidatejet.msdcorr >= 40.)
             & (abs(candidatejet.eta) < 2.5)
         )
         selection.add('minjetkin_muoncr',

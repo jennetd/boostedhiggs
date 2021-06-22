@@ -81,7 +81,6 @@ class HbbProcessor(processor.ProcessorABC):
                 hist.Cat('region', 'Region'),
                 hist.Bin('genflavor', 'Gen. jet flavor', [0, 1, 2, 3, 4]),
                 hist.Bin('cut', 'Cut index', 15, 0, 15),
-#                hist.Bin('msd', r'Jet $m_{sd}$', 22, 47, 201),          
             ),
             'btagWeight': hist.Hist('Events', hist.Cat('dataset', 'Dataset'), hist.Bin('val', 'BTag correction', 50, 0, 3)),
             'templates': hist.Hist(
@@ -90,8 +89,8 @@ class HbbProcessor(processor.ProcessorABC):
                 hist.Cat('region', 'Region'),
                 hist.Cat('systematic', 'Systematic'),
                 hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
-                hist.Bin('msd1', r'Jet $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet ddb score', [0, 0.7, 0.89, 1]),
+                hist.Bin('msd1', r'Jet $m_{sd}$', 23, 40, 201),
+                hist.Bin('ddb1', r'Jet ddb score', [0, 0.64, 0.7, 0.89, 1]),
             ),
         })
 
@@ -205,7 +204,7 @@ class HbbProcessor(processor.ProcessorABC):
 
         selection.add('minjetkin',
             (candidatejet.pt >= 450)
-            & (candidatejet.msdcorr >= 47.)
+            & (candidatejet.msdcorr >= 40.)
             & (abs(candidatejet.eta) < 2.5)
         )
         selection.add('minjetkin_muoncr',

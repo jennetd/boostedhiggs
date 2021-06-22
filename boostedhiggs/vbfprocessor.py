@@ -82,7 +82,6 @@ class VBFProcessor(processor.ProcessorABC):
                 hist.Cat('region', 'Region'),
                 hist.Bin('genflavor', 'Gen. jet flavor', [0, 1, 2, 3, 4]),
                 hist.Bin('cut', 'Cut index', 15, 0, 15),
-#                hist.Bin('msd', r'Jet $m_{sd}$', 22, 47, 201),          
             ),
             'btagWeight': hist.Hist('Events', hist.Cat('dataset', 'Dataset'), hist.Bin('val', 'BTag correction', 50, 0, 3)),
             'templates-vbf': hist.Hist(
@@ -91,22 +90,22 @@ class VBFProcessor(processor.ProcessorABC):
                 hist.Cat('region', 'Region'),
                 hist.Cat('systematic', 'Systematic'),
                 hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
-                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.7, 0.89, 1]),
+                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 23, 40, 201),
+                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.64, 0.7, 0.89, 1]),
                 hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
                 hist.Bin('mjj', r'$m_{jj}$',[0,350,500,1000,2000,3000,4000]),
             ),
-#            'templates-vbf-2': hist.Hist(
-#                'Events',
-#                hist.Cat('dataset', 'Dataset'),
-#                hist.Cat('region', 'Region'),
-#                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.89, 1]),
-#                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-#                hist.Bin('qgl1', r'Jet 1 QGL', 10, 0, 1),
-#                hist.Bin('qgl2', r'Jet 2 QGL', 10, 0, 1),
-#                hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
-#                hist.Bin('mjj', r'$m_{jj}$',8,0,4000)
-#            ),
+            'templates-vbf-2': hist.Hist(
+                'Events',
+                hist.Cat('dataset', 'Dataset'),
+                hist.Cat('region', 'Region'),
+                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.64, 0.7, 0.89, 1]),
+                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 23, 40, 201),
+                hist.Bin('ptj1', r'Small jet 1 $p_{T}$', 10, 0, 2000),
+                hist.Bin('ptj2', r'Small jet 2 $p_{T}$', 10, 0, 2000),
+                hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
+                hist.Bin('mjj', r'$m_{jj}$',8,0,4000)
+            ),
         })
 
     @property
@@ -219,7 +218,7 @@ class VBFProcessor(processor.ProcessorABC):
 
         selection.add('minjetkin',
             (candidatejet.pt >= 450)
-            & (candidatejet.msdcorr >= 47.)
+            & (candidatejet.msdcorr >= 40.)
             & (abs(candidatejet.eta) < 2.5)
         )
         selection.add('minjetkin_muoncr',
@@ -264,8 +263,9 @@ class VBFProcessor(processor.ProcessorABC):
 
         deta = abs(ak.firsts(jet1).eta - ak.firsts(jet2).eta)
         mjj = ( ak.firsts(jet1) + ak.firsts(jet2) ).mass
-        qgl1 = ak.firsts(jet1.qgl)
-        qgl2 = ak.firsts(jet2.qgl)
+
+#        qgl1 = ak.firsts(jet1.qgl)
+#        qgl2 = ak.firsts(jet2.qgl)
 
         selection.add('ak4jets', deta > 0)
         selection.add('deta', deta > 3.5)
@@ -394,18 +394,18 @@ class VBFProcessor(processor.ProcessorABC):
                 weight=weight,
             )
 
-#            if sname == 'nominal':
-#                output['templates-vbf-2'].fill(
-#                    dataset=dataset,
-#                    region=region,
-#                    ddb1=normalize(candidatejet.btagDDBvL, cut),
-#                    msd1=normalize(msd_matched, cut),
-#                    qgl1=normalize(qgl1, cut),
-#                    qgl2=normalize(qgl2, cut),
-#                    deta=normalize(deta, cut),
-#                    mjj=normalize(mjj, cut),
-#                    weight=weight,
-#                )
+            if sname == 'nominal':
+                output['templates-vbf-2'].fill(
+                    dataset=dataset,
+                    region=region,
+                    ddb1=normalize(candidatejet.btagDDBvL, cut),
+                    msd1=normalize(msd_matched, cut),
+                    ptj1=normalize(ak.firsts(jet1.pt), cut),
+                    ptj2=normalize(ak.firsts(jet2.pt), cut),
+                    deta=normalize(deta, cut),
+                    mjj=normalize(mjj, cut),
+                    weight=weight,
+                )
 
         for region in regions:
             for systematic in systematics:
