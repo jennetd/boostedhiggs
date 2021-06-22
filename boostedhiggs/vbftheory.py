@@ -93,11 +93,12 @@ class VBFTheoryProcessor(processor.ProcessorABC):
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Cat('systematic', 'Systematic'),
+                hist.Bin('genflavor', 'Gen. jet flavor', [0, 1, 2, 3, 4]),
                 hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
                 hist.Bin('msd1', r'Jet 1 $m_{sd}$', 23, 40, 201),
                 hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.64, 0.7, 0.89, 1]),
                 hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
-                hist.Bin('mjj', r'$m_{jj}$',[0,350,500,1000,2000,3000,4000]),
+                hist.Bin('mjj', r'$m_{jj}$',[500,1000,2000,4000]),
             ),
         })
 
@@ -389,6 +390,7 @@ class VBFTheoryProcessor(processor.ProcessorABC):
                 dataset=dataset,
                 region=region,
                 systematic=sname,
+                genflavor=normalize(genflavor,cut),
                 pt1=normalize(candidatejet.pt, cut),
                 msd1=normalize(msd_matched, cut),
                 ddb1=normalize(candidatejet.btagDDBvL, cut),

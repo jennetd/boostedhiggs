@@ -88,12 +88,13 @@ class VBFProcessor(processor.ProcessorABC):
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
+                hist.Bin('genflavor', 'Gen. jet flavor', [0, 1, 2, 3, 4]),
                 hist.Cat('systematic', 'Systematic'),
                 hist.Bin('pt1', r'Jet $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
                 hist.Bin('msd1', r'Jet 1 $m_{sd}$', 23, 40, 201),
                 hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.64, 0.7, 0.89, 1]),
                 hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
-                hist.Bin('mjj', r'$m_{jj}$',[0,350,500,1000,2000,3000,4000]),
+                hist.Bin('mjj', r'$m_{jj}$',[500,1000,2000,4000]),
             ),
             'templates-vbf-2': hist.Hist(
                 'Events',
@@ -104,7 +105,7 @@ class VBFProcessor(processor.ProcessorABC):
                 hist.Bin('ptj1', r'Small jet 1 $p_{T}$', 10, 0, 2000),
                 hist.Bin('ptj2', r'Small jet 2 $p_{T}$', 10, 0, 2000),
                 hist.Bin('deta', r'$\Delta \eta$', 14,0,7),
-                hist.Bin('mjj', r'$m_{jj}$',8,0,4000)
+                hist.Bin('mjj', r'$m_{jj}$',[500,1000,2000,4000])
             ),
         })
 
@@ -386,6 +387,7 @@ class VBFProcessor(processor.ProcessorABC):
                 dataset=dataset,
                 region=region,
                 systematic=sname,
+                genflavor=normalize(genflavor,cut),
                 pt1=normalize(candidatejet.pt, cut),
                 msd1=normalize(msd_matched, cut),
                 ddb1=normalize(ddb, cut),
