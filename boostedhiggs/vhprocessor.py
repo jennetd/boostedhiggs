@@ -90,7 +90,7 @@ class VHProcessor(processor.ProcessorABC):
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Cat('systematic', 'Systematic'),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.7, 0.89, 1]),
+                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.64, 0.89, 1]),
                 hist.Bin('pt1', r'Jet 1 $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
                 hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
                 hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
@@ -100,7 +100,7 @@ class VHProcessor(processor.ProcessorABC):
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.7, 0.89, 1]),
+                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.64, 0.89, 1]),
                 hist.Bin('pt1', r'Jet 1 $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
                 hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
                 hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.7, 0.89, 1]),
@@ -111,9 +111,9 @@ class VHProcessor(processor.ProcessorABC):
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.7, 0.89, 1]),
+                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.64, 0.89, 1]),
                 hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.7, 0.89, 1]),
+                hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.64, 0.89, 1]),
                 hist.Bin('ddc2', r'Jet 2 ddc score', 5, 0, 1),
             ),
 
@@ -426,7 +426,7 @@ class VHProcessor(processor.ProcessorABC):
                     ddb1=normalize(ddb, cut),
                     msd2=normalize(msd2_matched, cut),
                     ddb2=normalize(ddb2, cut),
-                    ddc2=normalize(secondjet.btagDDCvL, cut),
+                    ddc2=normalize(secondjet.btagDDCvLV2, cut),
                     weight=weight,
                 )
 
