@@ -82,7 +82,6 @@ class VHProcessor(processor.ProcessorABC):
                 hist.Cat('region', 'Region'),
                 hist.Bin('genflavor', 'Gen. jet flavor', [0, 1, 2, 3, 4]),
                 hist.Bin('cut', 'Cut index', 15, 0, 15),
-#                hist.Bin('msd', r'Jet $m_{sd}$', 22, 47, 201),          
             ),
             'btagWeight': hist.Hist('Events', hist.Cat('dataset', 'Dataset'), hist.Bin('val', 'BTag correction', 50, 0, 3)),
             'templates': hist.Hist(
@@ -90,32 +89,25 @@ class VHProcessor(processor.ProcessorABC):
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Cat('systematic', 'Systematic'),
+                hist.Bin('genflavor1', 'Gen. jet 1 flavor', [0, 1, 2, 3, 4]),
+                hist.Bin('genflavor2', 'Gen. jet 2 flavor', [0, 1, 2, 3, 4]),
                 hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.64, 0.89, 1]),
                 hist.Bin('pt1', r'Jet 1 $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
-                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
+                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 23, 40, 201),
+                hist.Bin('msd2', r'Jet 2 $m_{sd}$', 23, 40, 201),
             ),
-            'templates-vh-1': hist.Hist(
-                'Events',
-                hist.Cat('dataset', 'Dataset'),
-                hist.Cat('region', 'Region'),
-                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.64, 0.89, 1]),
-                hist.Bin('pt1', r'Jet 1 $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
-                hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.7, 0.89, 1]),
-                hist.Bin('pt2', r'Jet 2 $p_{T}$ [GeV]', [400, 450, 500, 550, 600, 675, 800, 1200]),
-            ),
-            'templates-vh-2': hist.Hist(
-                'Events',
-                hist.Cat('dataset', 'Dataset'),
-                hist.Cat('region', 'Region'),
-                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.64, 0.89, 1]),
-                hist.Bin('msd2', r'Jet 2 $m_{sd}$', 22, 47, 201),
-                hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.64, 0.89, 1]),
-                hist.Bin('ddc2', r'Jet 2 ddc score', 5, 0, 1),
-            ),
+#            'templates-vh-1': hist.Hist(
+#                'Events',
+#                hist.Cat('dataset', 'Dataset'),
+#                hist.Cat('region', 'Region'),
+#                hist.Bin('genflavor1', 'Gen. jet 1 flavor', [0, 1, 2, 3, 4]),
+#                hist.Bin('genflavor2', 'Gen. jet 2 flavor', [0, 1, 2, 3, 4]),
+#                hist.Bin('msd1', r'Jet 1 $m_{sd}$', 23, 40, 201),
+#                hist.Bin('ddb1', r'Jet 1 ddb score', [0, 0.64, 0.89, 1]),
+#                hist.Bin('msd2', r'Jet 2 $m_{sd}$', 23, 40, 201),
+#                hist.Bin('ddb2', r'Jet 2 ddb score', [0, 0.64, 0.89, 1]),
+#                hist.Bin('ddc2', r'Jet 2 ddc score', 5, 0, 1),
+#            ),
 
         })
 
@@ -231,12 +223,12 @@ class VHProcessor(processor.ProcessorABC):
 
         selection.add('jet1kin',
             (candidatejet.pt >= 450)
-            & (candidatejet.msdcorr >= 47.)
+            & (candidatejet.msdcorr >= 40.)
             & (abs(candidatejet.eta) < 2.5)
         )
         selection.add('jet2kin',
             (secondjet.pt >= 400)
-            & (secondjet.msdcorr >= 47.)
+            & (secondjet.msdcorr >= 40.)
             & (abs(secondjet.eta) < 2.5)
         )
         selection.add('minjetkin_muoncr',
@@ -399,6 +391,8 @@ class VHProcessor(processor.ProcessorABC):
                 dataset=dataset,
                 region=region,
                 systematic=sname,
+                genflavor1=normalize(genflavor, cut),
+                genflavor2=normalize(genflavor2, cut),
                 pt1=normalize(candidatejet.pt, cut),
                 msd1=normalize(msd_matched, cut),
                 msd2=normalize(msd2_matched, cut),
@@ -406,29 +400,19 @@ class VHProcessor(processor.ProcessorABC):
                 weight=weight,
             )
 
-            if sname == "nominal":
-                output['templates-vh-1'].fill(
-                    dataset=dataset,
-                    region=region,
-                    msd1=normalize(msd_matched, cut),
-                    ddb1=normalize(ddb, cut),
-                    pt1=normalize(candidatejet.pt, cut),
-                    msd2=normalize(msd2_matched, cut),
-                    ddb2=normalize(ddb2, cut),
-                    pt2=normalize(secondjet.pt, cut),
-                    weight=weight,
-                )
-
-                output['templates-vh-2'].fill(
-                    dataset=dataset,
-                    region=region,
-                    msd1=normalize(msd_matched, cut),
-                    ddb1=normalize(ddb, cut),
-                    msd2=normalize(msd2_matched, cut),
-                    ddb2=normalize(ddb2, cut),
-                    ddc2=normalize(secondjet.btagDDCvLV2, cut),
-                    weight=weight,
-                )
+#            if sname == "nominal":
+#                output['templates-vh-1'].fill(
+#                    dataset=dataset,
+#                    region=region,
+#                    genflavor1=normalize(genflavor, cut),
+#                    genflavor2=normalize(genflavor2, cut),
+#                    msd1=normalize(msd_matched, cut),
+#                    ddb1=normalize(ddb, cut),
+#                    msd2=normalize(msd2_matched, cut),
+#                    ddb2=normalize(ddb2, cut),
+#                    ddc2=normalize(secondjet.btagDDCvLV2, cut),
+#                    weight=weight,
+#                )
 
 
         for region in regions:
